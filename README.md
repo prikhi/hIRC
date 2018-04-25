@@ -20,6 +20,18 @@ Instead of swapping the Python channels in irssi with Haskell channels, I can
 simply switch terminals.
 
 
+## Develop
+
+You should test against a local IRC server, something like `oragono`:
+
+    sudo packer -S oragono
+
+Then build and run the daemon:
+
+    stack build
+    stack exec hircd
+
+
 ## License
 
 GPL-3.0

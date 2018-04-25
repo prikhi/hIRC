@@ -58,6 +58,14 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - hirc
+    - async
+    - bytestring
+    - containers
+    - irc-client
+    - lens
+    - mtl
+    - stm
+    - text
 
 tests:
   hirc-test:
