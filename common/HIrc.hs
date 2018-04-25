@@ -1,0 +1,2 @@
+module HIrc
+    where
