@@ -32,6 +32,28 @@ Then build and run the daemon:
     stack exec hircd
 
 
+## Architecture
+
+### Daemon
+
+Three message queues are used in the daemon. One for sending messages to
+Clients via the socket server. One for receiving messages from Clients via the
+socket server. And one for areceiving messages from IRC clients.
+
+On startup, initialize the application state, fork connections to the IRC
+servers, & fork a socket server.
+
+Then read the message queues and handle any events until the daemon is
+terminated.
+
+The IRC forks simply connect to the server, register/identify the user, & adds
+any messages to the `IrcQueue`. The IRC server's state is saved in a TVar so
+messages can be sent to the server from the main thread.
+
+The socket server simply pipes the `ClientQueue` into the socket & the socket
+into the `DaemonQueue`.
+
+
 ## License
 
 GPL-3.0

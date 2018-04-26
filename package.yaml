@@ -58,13 +58,20 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - hirc
-    - async
+    - lifted-async
+    - binary
+    - binary-conduit
     - bytestring
+    - conduit
+    - conduit-extra
     - containers
     - irc-client
     - lens
+    - monad-control
     - mtl
+    - safe-exceptions
     - stm
+    - stm-conduit
     - text
 
 tests:
