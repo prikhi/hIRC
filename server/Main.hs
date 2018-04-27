@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
@@ -15,14 +14,12 @@ import Control.Lens ((&), (.~), (%~))
 import Control.Monad (void, forever)
 import Control.Monad.Reader (MonadIO, MonadReader, ReaderT, runReaderT, asks, liftIO)
 import Control.Monad.Trans.Control (MonadBaseControl, StM)
-import Data.Binary (Binary)
 import Data.Maybe (fromMaybe)
 import Data.Conduit ((.|), ConduitT, Void, runConduit)
 import Data.Conduit.Serialization.Binary (conduitEncode, conduitDecode)
 import Data.Conduit.Network.Unix (AppDataUnix, serverSettings, runUnixServer, appSource, appSink)
 import Data.Conduit.TQueue (sinkTQueue, sourceTQueue)
 import Data.Monoid ((<>))
-import GHC.Generics (Generic)
 import Network.IRC.Client
     ( IRC, IRCState, Event(..), EventHandler(..), Source(..), Message(..)
     , ConnectionConfig, InstanceConfig, plainConnection, defaultInstanceConfig
@@ -378,34 +375,12 @@ data Env
         }
 
 
-type ClientQueue
-    = TQueue ClientMsg
-
-data ClientMsg
-    = NewMessage ServerName ChannelName ChatMessage
-    deriving (Generic)
-
-instance Binary ClientMsg
-
-
-type DaemonQueue
-    = TQueue DaemonMsg
-
-data DaemonMsg
-    = SendMessage ServerName ChannelName ChatMessage
-    deriving (Generic)
-
-instance Binary DaemonMsg
-
-
 type IrcQueue
     = TQueue IrcMsg
 
 data IrcMsg
     = ReceiveMessage ServerName ChannelName UserName ChatMessage
-    deriving (Generic)
-
-instance Binary IrcMsg
+    deriving (Show)
 
 data Config
     = Config
@@ -445,35 +420,12 @@ data ServerSecurity
 newtype UserName
     = UserName
         { getUserName :: T.Text
-        } deriving (Generic)
-
-instance Binary UserName
+        } deriving (Show)
 
 newtype Password
     = Password
         { getPassword :: T.Text
         }
-
-newtype ChatMessage
-    = Message
-        { getMessage :: T.Text
-        } deriving (Generic)
-
-instance Binary ChatMessage
-
-newtype ServerName
-    = ServerName
-        { getServerName :: T.Text
-        } deriving (Eq, Ord, Generic)
-
-instance Binary ServerName
-
-newtype ChannelName
-    = ChannelName
-        { getChannelName :: T.Text
-        } deriving (Eq, Ord, Generic)
-
-instance Binary ChannelName
 
 newtype ServerHost
     = ServerHost

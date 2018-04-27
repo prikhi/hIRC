@@ -38,6 +38,8 @@ dependencies:
 
 library:
   source-dirs: common
+  dependencies:
+    - binary
 
 executables:
   hirc:
@@ -59,7 +61,6 @@ executables:
     dependencies:
     - hirc
     - lifted-async
-    - binary
     - binary-conduit
     - bytestring
     - conduit
