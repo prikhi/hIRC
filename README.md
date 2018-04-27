@@ -19,6 +19,8 @@ terminal showing my Python channels, and another showing the Haskell channels.
 Instead of swapping the Python channels in irssi with Haskell channels, I can
 simply switch terminals.
 
+**The current version is an early alpha - super basic & non-configurable**
+
 
 ## Develop
 
@@ -30,6 +32,10 @@ Then build and run the daemon:
 
     stack build
     stack exec hircd
+
+And run the client in another terminal:
+
+    stack exec hirc
 
 
 ## Architecture
@@ -43,7 +49,7 @@ socket server. And one for areceiving messages from IRC clients.
 On startup, initialize the application state, fork connections to the IRC
 servers, & fork a socket server.
 
-Then read the message queues and handle any events until the daemon is
+Then it reads the message queues and handle any events until the daemon is
 terminated.
 
 The IRC forks simply connect to the server, register/identify the user, & adds
@@ -52,6 +58,35 @@ messages can be sent to the server from the main thread.
 
 The socket server simply pipes the `ClientQueue` into the socket & the socket
 into the `DaemonQueue`.
+
+
+### Client
+
+The client is currently super simple.
+
+On startup, it creates message queues from/to the daemon, connects to the
+daemon's socket server, & starts the Brick application.
+
+The UI contains the message log for the current channel, as well as an input
+form. When the input form is submitted, the Client will send the message to the
+Daemon, which sends it to the IRC server as well as any clients subscribed to
+that channel.
+
+When a new IRC message is received from the daemon, it is added to the
+respective channel's message log.
+
+
+### Message Flow
+
+When a client connects to the daemon, the daemon sends it a Hello message
+containing it's Client ID & the list of available channels. The client can then
+reply with a Subscribe message containing the list of channels it cares about.
+
+Then when a client sends a chat message or the IRC server sends us a new
+message, the message is forwarded to any clients subscribed to the channel.
+
+When a client exits, it sends a Goodbye message to let the daemon know it can
+close it's message queue & socket connection.
 
 
 ## License
