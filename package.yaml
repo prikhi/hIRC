@@ -35,12 +35,13 @@ ghc-options:
 
 dependencies:
 - base >= 4.7 && < 5
+- stm
+- text
 
 library:
   source-dirs: common
   dependencies:
     - binary
-    - stm
     - stm-chans
 
 executables:
@@ -53,6 +54,17 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - hirc
+    - async
+    - binary-conduit
+    - brick
+    - conduit
+    - conduit-extra
+    - containers
+    - immortal
+    - lens
+    - safe-exceptions
+    - stm-conduit
+    - vty
   hircd:
     main:                Main.hs
     source-dirs:         server
@@ -73,10 +85,8 @@ executables:
     - monad-control
     - mtl
     - safe-exceptions
-    - stm
     - stm-chans
     - stm-conduit
-    - text
 
 tests:
   hirc-test:
