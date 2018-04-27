@@ -168,7 +168,6 @@ runSocketServer = do
     async $ runDaemonServer "hircd.sock"
         (handleConnection serverMap clientId clientQueues)
     where
-        -- TODO: Create tvar in map
         handleConnection
             :: TVar (M.Map ServerName ServerData)
             -> TVar ClientId
@@ -282,11 +281,10 @@ handleIrcMessage = \case
 -- Functionality Typeclasses
 
 -- | Runs the Server for Clients
--- TODO: This'll need some sort of ClientId to differentiate which Client Queue.
 class Monad m => RunSocketServer m where
     -- | Run a unix socket server at the given path. Write ClientMsgs
     -- to the socket & DaemonMsgs from the socket to the daemon queue.
-    -- TODO: This type sig might be too coupled by using the TQueues
+    -- TODO: This type sig might be too coupled by using the TQueue
     runDaemonServer
         :: FilePath
         -> (DaemonQueue -> AppDataUnix -> IO ())
