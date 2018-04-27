@@ -182,8 +182,8 @@ runSocketServer = do
             clientQueue <- atomically $ do
                 queue <- newTMQueue
                 modifyTVar clientQueues $ M.insert clientId queue
+                writeTMQueue queue $ Hello clientId chanList
                 return queue
-            atomically $ writeTMQueue clientQueue $ Hello clientId chanList
             asyncConduits
                 [ sourceTMQueue clientQueue .| conduitEncode .| appSink connection
                 , appSource connection .| conduitDecode .| sinkTQueue daemonQueue
