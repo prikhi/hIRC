@@ -40,6 +40,8 @@ library:
   source-dirs: common
   dependencies:
     - binary
+    - stm
+    - stm-chans
 
 executables:
   hirc:
@@ -72,6 +74,7 @@ executables:
     - mtl
     - safe-exceptions
     - stm
+    - stm-chans
     - stm-conduit
     - text
 
