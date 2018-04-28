@@ -245,6 +245,7 @@ renderMessageLog s =
                 [ txt "Connecting to Daemon..."
                 ]
     where
+        maxNameLength = 12
         -- Render a single Channel Message
         renderMessage :: ChatMessage -> Widget AppWidget
         renderMessage m =
@@ -253,6 +254,13 @@ renderMessageLog s =
                     $ formatTime defaultTimeLocale "%d.%H:%M:%S"
                     $ messageTime m
                 , padLeftRight 1 $ vLimit 1 vBorder
+                , vLimit 1
+                    $ hLimit maxNameLength
+                    $ padLeft Max
+                    $ txt
+                    $ getUserName
+                    $ messageUser m
+                , padLeftRight 1 $ txt ">"
                 , wrap $ messageText m
                 ]
         -- Wrap text, breaking inside words if necessary

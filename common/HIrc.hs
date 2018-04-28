@@ -111,11 +111,18 @@ newtype ClientId
 
 instance Binary ClientId
 
+newtype UserName
+    = UserName
+        { getUserName :: T.Text
+        } deriving (Show, Generic)
+instance Binary UserName
+
 -- TODO Eventually add UserNames
 -- Split into ChannelMessage & ServerMessage
 data ChatMessage
     = Message
         { messageText :: T.Text
+        , messageUser :: UserName
         , messageTime :: ZonedTime
         } deriving (Generic, Show)
 

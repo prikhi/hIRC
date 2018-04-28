@@ -145,8 +145,7 @@ connectToServer defaultName serverName config = do
                         (Privmsg _ (Right msg), Channel name senderNick) ->
                             Just $ ReceiveMessage
                                 (ChannelId serverName (ChannelName name))
-                                (UserName senderNick)
-                                . Message msg
+                                . Message msg (UserName senderNick)
                         _ ->
                             Nothing
                 handler :: Source T.Text -> (ZonedTime -> IrcMsg) -> IRC s ()
@@ -267,8 +266,8 @@ handleDaemonMessage clientId = \case
             (Privmsg (getChannelName channelName) $ Right messageContents)
         -- TODO: Use username from server data!
         time <- getTime
-        let message = Message messageContents time
-        updateChannelLog messageTarget (UserName "ME") message
+        let message = Message messageContents (UserName "ME") time
+        updateChannelLog messageTarget message
         clients <- getSubscribers messageTarget
         forM_ clients $ \subscriberId ->
             sendClientMessage subscriberId $
@@ -286,8 +285,8 @@ handleIrcMessage
     -> m ()
 handleIrcMessage = \case
     -- Store the message & send it to the appropriate clients
-    ReceiveMessage target user message -> do
-        updateChannelLog target user message
+    ReceiveMessage target message -> do
+        updateChannelLog target message
         clients <- getSubscribers target
         forM_ clients $ \clientId ->
             sendClientMessage clientId $ NewMessage NewMessageData
@@ -359,10 +358,10 @@ instance (HasDaemonQueue env, HasIrcQueue env, MonadIO m) => ReadQueues (ReaderT
 -- | Manipulate the Message Log for a Channel
 class Monad m => UpdateChannelLog m where
     -- | Add a message to the log.
-    updateChannelLog :: ChannelId -> UserName -> ChatMessage -> m ()
+    updateChannelLog :: ChannelId -> ChatMessage -> m ()
 
 instance (HasServerMap env, MonadIO m) => UpdateChannelLog (ReaderT env m) where
-    updateChannelLog (ChannelId serverName channelName) _ message =
+    updateChannelLog (ChannelId serverName channelName) message =
         updateServerData serverName
             $ fmap (\d -> d { channelMap = updateChannelMap $ channelMap d })
         where
@@ -576,7 +575,7 @@ type IrcQueue
     = TQueue IrcMsg
 
 data IrcMsg
-    = ReceiveMessage ChannelId UserName ChatMessage
+    = ReceiveMessage ChannelId ChatMessage
     deriving (Show)
 
 data Config
@@ -613,11 +612,6 @@ data ServerSecurity
     | TLS
 
 -- Newtype Wrappers
-
-newtype UserName
-    = UserName
-        { getUserName :: T.Text
-        } deriving (Show)
 
 newtype Password
     = Password
