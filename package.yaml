@@ -37,11 +37,12 @@ dependencies:
 - base >= 4.7 && < 5
 - stm
 - text
+- time
 
 library:
   source-dirs: common
   dependencies:
-    - binary
+    - binary-orphans
     - stm-chans
 
 executables:
@@ -65,6 +66,7 @@ executables:
     - safe-exceptions
     - stm-conduit
     - vty
+    - word-wrap
   hircd:
     main:                Main.hs
     source-dirs:         server

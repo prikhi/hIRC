@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 module Main where
@@ -203,10 +204,10 @@ runSocketServer = do
                 foldl (\acc i -> acc *> Concurrently (runConduit i))
                     (Concurrently $ pure ())
 
--- | Message types handled by the Daemon.
+-- | Join the message types handled by the Daemon.
 data QueueMsg
-    = DaemonMsg (ClientId, DaemonMsg)
-    | IrcMsg IrcMsg
+    = DaemonQueueMsg DaemonRequest
+    | IrcQueueMsg IrcMsg
     deriving (Show)
 
 -- | Handle any incoming DaemonMsgs or IrcMsgs.
@@ -224,9 +225,9 @@ handleQueues
     => m ()
 handleQueues = forever $
     readQueueMessage >>= \case
-        DaemonMsg msg ->
-            uncurry handleDaemonMessage msg
-        IrcMsg msg ->
+        DaemonQueueMsg msg ->
+            handleDaemonMessage (sourceClient msg) (daemonMsg msg)
+        IrcQueueMsg msg ->
             handleIrcMessage msg
 
 handleDaemonMessage
@@ -245,9 +246,9 @@ handleDaemonMessage
 handleDaemonMessage clientId = \case
     -- Subscribe the client to the passed channels & reply with
     -- a Subscriptions message.
-    Subscribe cs -> do
-        subscriptions <- mapM (\c -> (c,) <$> getMessages c) cs
-        mapM_ (subscribe clientId) cs
+    Subscribe SubscribeData { requestedChannels } -> do
+        mapM_ (subscribe clientId) requestedChannels
+        subscriptions <- mapM (\c -> (c,) <$> getMessages c) requestedChannels
         sendClientMessage clientId $ Subscriptions subscriptions
         where
             getMessages
@@ -259,9 +260,10 @@ handleDaemonMessage clientId = \case
                     Just sData ->
                         return $ maybe [] messageLog $ M.lookup channelName (channelMap sData)
     -- Send the message to the IRC server
-    SendMessage serverName channelName message -> do
+    SendMessage SendMessageData { messageTarget, messageContents } -> do
+        let (serverName, channelName) = messageTarget
         sendIrcMessage serverName
-            (Privmsg (getChannelName channelName) $ Right (messageContents message))
+            (Privmsg (getChannelName channelName) $ Right messageContents)
         -- TODO: Use username from server data!
         time <- getTime
         let message = Message messageContents time
@@ -343,8 +345,8 @@ instance (HasDaemonQueue env, HasIrcQueue env, MonadIO m) => ReadQueues (ReaderT
         daemonQueue <- asks getDaemonQueue
         ircQueue <- asks getIrcQueue
         liftIO . atomically
-            $ (DaemonMsg <$> readTQueue daemonQueue)
-            `orElse` (IrcMsg <$> readTQueue ircQueue)
+            $ (DaemonQueueMsg <$> readTQueue daemonQueue)
+            `orElse` (IrcQueueMsg <$> readTQueue ircQueue)
 
 
 -- | Manipulate the Message Log for a Channel

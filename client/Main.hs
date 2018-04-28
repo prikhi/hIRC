@@ -148,11 +148,8 @@ handleEvent s = \case
     e@(VtyEvent ev) ->
         case ev of
             -- Say Goodbye to the Daemon & Stop the Application.
-            V.EvKey (V.KChar 'q') [V.MCtrl] -> do
-                maybeM (appClientId s) $ \clientId ->
-                    liftIO . atomically $ writeTQueue (appDaemonQueue s)
-                        (clientId, Goodbye)
-                halt s
+            V.EvKey (V.KChar 'q') [V.MCtrl] ->
+                sendDaemonMessage s Goodbye >> halt s
             -- Send Chat Message to Channel if one is available.
             V.EvKey V.KEnter [] ->
                 if allFieldsValid (appInputForm s) then
@@ -162,7 +159,10 @@ handleEvent s = \case
                         Just (serverName, channelName) -> do
                             let message = _input . formState $ appInputForm s
                             sendDaemonMessage s $
-                                SendMessage serverName channelName (Message message)
+                                SendMessage SendMessageData
+                                    { messageTarget = (serverName, channelName)
+                                    , messageContents = message
+                                    }
                             continue s { appInputForm = inputForm }
                 else
                     continue s
@@ -178,8 +178,11 @@ handleEvent s = \case
             -- ability to add channels to a view, or group channels & start
             -- based on flag.
             Hello clientId channelList -> do
-                liftIO . atomically . writeTQueue (appDaemonQueue s) $ (clientId, Subscribe channelList)
-                continue s { appClientId = Just clientId }
+                let updatedState = s { appClientId = Just clientId }
+                sendDaemonMessage updatedState $ Subscribe SubscribeData
+                    { requestedChannels = channelList
+                    }
+                continue updatedState
             -- Update the Message Logs.
             -- TODO: Insert only new channel's logs so we can send Subscribe
             -- events for new channels without replacing existing logs.
@@ -195,13 +198,14 @@ handleEvent s = \case
                         M.adjust (++ [message]) (serverName, channelName) $ appChannelData s
                     }
     _ ->
+        -- Ignore the Mouse Up/Down Events
         continue s
 
 -- | Send a message to the daemon if a ClientId is available.
 sendDaemonMessage :: MonadIO m => AppState -> DaemonMsg -> m ()
 sendDaemonMessage s m =
     maybeM (appClientId s) $ \clientId ->
-        liftIO $ atomically $ writeTQueue (appDaemonQueue s) (clientId, m)
+        liftIO $ atomically $ writeTQueue (appDaemonQueue s) $ DaemonRequest clientId m
 
 maybeM :: Monad m => Maybe a -> (a -> m ()) -> m ()
 maybeM m f =

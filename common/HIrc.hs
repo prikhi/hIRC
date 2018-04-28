@@ -31,20 +31,43 @@ instance Binary ClientMsg
 
 -- | A queue containing message from Clients to the Daemon
 type DaemonQueue
-    = TQueue (ClientId, DaemonMsg)
+    = TQueue DaemonRequest
 
 -- | Messages Clients can send to the Daemon
--- TODO: ConnectToServer, JoinChannel
-data DaemonMsg
-    = Subscribe [(ServerName, ChannelName)]
-    -- ^ Notify the Client with updates to the given channels.
-    | SendMessage ServerName ChannelName ChatMessage
-    -- ^ Send a message to the specified channel.
-    | Goodbye
-    -- ^ Close the connection between the Client & Daemon.
-    deriving (Generic, Show)
+data DaemonRequest
+    = DaemonRequest
+        { sourceClient :: ClientId
+        -- ^ The ID of the Client generating the request.
+        , daemonMsg :: DaemonMsg
+        -- ^ The Message sent by the Client.
+        } deriving (Show, Generic)
+instance Binary DaemonRequest
 
+data DaemonMsg
+    = Subscribe SubscribeData
+    -- ^ Subscribe the Client to the Requested Channels
+    | SendMessage SendMessageData
+    -- ^ Send a Message to a Specific Channel
+    | Goodbye
+    -- ^ Close the Connection between the Client & Daemon
+    deriving (Show, Generic)
 instance Binary DaemonMsg
+
+newtype SubscribeData
+    = SubscribeData
+        { requestedChannels :: [(ServerName, ChannelName)]
+        -- ^ The Channels the Client Wants to Subscribe to.
+        } deriving (Show, Generic)
+instance Binary SubscribeData
+
+data SendMessageData
+    = SendMessageData
+        { messageTarget :: (ServerName, ChannelName)
+        -- ^ The Channel for the Message.
+        , messageContents :: T.Text
+        -- ^ The Text of the Message.
+        } deriving (Show, Generic)
+instance Binary SendMessageData
 
 
 -- Basic Types
