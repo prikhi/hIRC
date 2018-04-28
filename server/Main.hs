@@ -144,7 +144,7 @@ connectToServer defaultName serverName config = do
                     case (_message ev, _source ev) of
                         (Privmsg _ (Right msg), Channel name senderNick) ->
                             Just $ ReceiveMessage
-                                (serverName, ChannelName name)
+                                (ChannelId serverName (ChannelName name))
                                 (UserName senderNick)
                                 . Message msg
                         _ ->
@@ -194,11 +194,11 @@ runSocketServer = do
                 [ sourceTMQueue clientQueue .| conduitEncode .| appSink connection
                 , appSource connection .| conduitDecode .| sinkTQueue daemonQueue
                 ]
-        makeChanList :: TVar (M.Map ServerName ServerData) -> IO [(ServerName, ChannelName)]
+        makeChanList :: TVar (M.Map ServerName ServerData) -> IO [ChannelId]
         makeChanList dataRef = do
             serverMap <- M.toList <$> readTVarIO dataRef
             return . concat . flip map serverMap $ \(serverName, sData) ->
-                map (\c -> (serverName, c)) . M.keys $ channelMap sData
+                map (ChannelId serverName) . M.keys $ channelMap sData
         asyncConduits :: [ConduitT () Void IO ()] -> IO ()
         asyncConduits =
             runConcurrently .
@@ -253,8 +253,8 @@ handleDaemonMessage clientId = \case
         sendClientMessage clientId $ Subscriptions $ SubscriptionsData subscriptions
         where
             getMessages
-                :: (GetServerData m) => (ServerName, ChannelName) -> m [ChatMessage]
-            getMessages (serverName, channelName) =
+                :: (GetServerData m) => ChannelId -> m [ChatMessage]
+            getMessages (ChannelId serverName channelName) =
                 getServerData serverName >>= \case
                     Nothing ->
                         return []
@@ -262,14 +262,14 @@ handleDaemonMessage clientId = \case
                         return $ maybe [] messageLog $ M.lookup channelName (channelMap sData)
     -- Send the message to the IRC server & subscribed clients.
     SendMessage SendMessageData { messageTarget, messageContents } -> do
-        let (serverName, channelName) = messageTarget
+        let (ChannelId serverName channelName) = messageTarget
         sendIrcMessage serverName
             (Privmsg (getChannelName channelName) $ Right messageContents)
         -- TODO: Use username from server data!
         time <- getTime
         let message = Message messageContents time
         updateChannelLog messageTarget (UserName "ME") message
-        clients <- getSubscribers (serverName, channelName)
+        clients <- getSubscribers messageTarget
         forM_ clients $ \subscriberId ->
             sendClientMessage subscriberId $
                 NewMessage NewMessageData
@@ -359,10 +359,10 @@ instance (HasDaemonQueue env, HasIrcQueue env, MonadIO m) => ReadQueues (ReaderT
 -- | Manipulate the Message Log for a Channel
 class Monad m => UpdateChannelLog m where
     -- | Add a message to the log.
-    updateChannelLog :: (ServerName, ChannelName) -> UserName -> ChatMessage -> m ()
+    updateChannelLog :: ChannelId -> UserName -> ChatMessage -> m ()
 
 instance (HasServerMap env, MonadIO m) => UpdateChannelLog (ReaderT env m) where
-    updateChannelLog (serverName, channelName) _ message =
+    updateChannelLog (ChannelId serverName channelName) _ message =
         updateServerData serverName
             $ fmap (\d -> d { channelMap = updateChannelMap $ channelMap d })
         where
@@ -461,7 +461,7 @@ instance (HasNextClientId env, MonadIO m) => NextClientId (ReaderT env m) where
 
 
 class Monad m => AddSubscription m where
-    subscribe :: ClientId -> (ServerName, ChannelName) ->m ()
+    subscribe :: ClientId -> ChannelId ->m ()
 
 instance (HasSubscriptions env, MonadIO m) => AddSubscription (ReaderT env m) where
     subscribe clientId k = do
@@ -470,7 +470,7 @@ instance (HasSubscriptions env, MonadIO m) => AddSubscription (ReaderT env m) wh
             M.alter (Just . maybe [clientId] (clientId :)) k
 
 class Monad m => GetSubscribers m where
-    getSubscribers :: (ServerName, ChannelName) -> m [ClientId]
+    getSubscribers :: ChannelId -> m [ClientId]
 
 instance (HasSubscriptions env, MonadIO m) => GetSubscribers (ReaderT env m) where
     getSubscribers k = do
@@ -542,7 +542,7 @@ instance HasNextClientId (TVar ClientId) where
 
 
 class HasSubscriptions a where
-    getSubscriptions :: a -> TVar (M.Map (ServerName, ChannelName) [ClientId])
+    getSubscriptions :: a -> TVar (M.Map ChannelId [ClientId])
 
 instance HasSubscriptions Env where
     getSubscriptions = envSubscriptions
@@ -568,7 +568,7 @@ data Env
         -- ^ A Queue Containing Messages for the Daemon from an IRC Server
         , envNextClientId :: TVar ClientId
         -- ^ A Counter Tracking the Id for the Next Connecting Client
-        , envSubscriptions :: TVar (M.Map (ServerName, ChannelName) [ClientId])
+        , envSubscriptions :: TVar (M.Map ChannelId [ClientId])
         }
 
 
@@ -576,7 +576,7 @@ type IrcQueue
     = TQueue IrcMsg
 
 data IrcMsg
-    = ReceiveMessage (ServerName, ChannelName) UserName ChatMessage
+    = ReceiveMessage ChannelId UserName ChatMessage
     deriving (Show)
 
 data Config

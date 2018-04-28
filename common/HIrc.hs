@@ -32,7 +32,7 @@ data HelloData
     = HelloData
         { yourClientId :: ClientId
         -- ^ The ID the Client Should Use in `DaemonRequests`.
-        , availableChannels :: [(ServerName, ChannelName)]
+        , availableChannels :: [ChannelId]
         -- ^ The Channels the Client Can Subscribe To.
         } deriving (Show, Generic)
 instance Binary HelloData
@@ -40,14 +40,14 @@ instance Binary HelloData
 -- | TODO: Maybe just send a Map the Client can union with their Map.
 newtype SubscriptionsData
     = SubscriptionsData
-        { subscriptionLogs :: [((ServerName, ChannelName), [ChatMessage])]
+        { subscriptionLogs :: [(ChannelId, [ChatMessage])]
         -- ^ The Chat Logs for Each Newly Subscribed Channel
         } deriving (Show, Generic)
 instance Binary SubscriptionsData
 
 data NewMessageData
     = NewMessageData
-        { newMessageTarget :: (ServerName, ChannelName)
+        { newMessageTarget :: ChannelId
         , newMessage :: ChatMessage
         } deriving (Show, Generic)
 instance Binary NewMessageData
@@ -81,14 +81,14 @@ instance Binary DaemonMsg
 
 newtype SubscribeData
     = SubscribeData
-        { requestedChannels :: [(ServerName, ChannelName)]
+        { requestedChannels :: [ChannelId]
         -- ^ The Channels the Client Wants to Subscribe to.
         } deriving (Show, Generic)
 instance Binary SubscribeData
 
 data SendMessageData
     = SendMessageData
-        { messageTarget :: (ServerName, ChannelName)
+        { messageTarget :: ChannelId
         -- ^ The Channel for the Message.
         , messageContents :: T.Text
         -- ^ The Text of the Message.
@@ -97,6 +97,12 @@ instance Binary SendMessageData
 
 
 -- Basic Types
+
+-- | Channels are identified by their name & the server they're on.
+data ChannelId
+    = ChannelId ServerName ChannelName
+    deriving (Show, Eq, Ord, Generic)
+instance Binary ChannelId
 
 newtype ClientId
     = ClientId

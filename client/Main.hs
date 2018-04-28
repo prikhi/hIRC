@@ -64,13 +64,13 @@ data AppState
         { appDaemonQueue :: DaemonQueue
         , appChannelData :: ChannelData
         , appClientId :: Maybe ClientId
-        , appCurrentChannel :: Maybe (ServerName, ChannelName)
+        , appCurrentChannel :: Maybe ChannelId
         , appInputForm :: Form InputForm AppEvent AppWidget
         }
 
 -- TODO use better datatype for appending to end of message list.
 type ChannelData
-    = M.Map (ServerName, ChannelName) [ChatMessage]
+    = M.Map ChannelId [ChatMessage]
 
 newtype InputForm
     = InputForm
@@ -160,11 +160,11 @@ handleEvent s = \case
                     case appCurrentChannel s of
                         Nothing ->
                             continue s
-                        Just (serverName, channelName) -> do
+                        Just channelId -> do
                             let message = _input . formState $ appInputForm s
                             sendDaemonMessage s $
                                 SendMessage SendMessageData
-                                    { messageTarget = (serverName, channelName)
+                                    { messageTarget = channelId
                                     , messageContents = message
                                     }
                             continue s { appInputForm = inputForm }
