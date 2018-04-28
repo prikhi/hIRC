@@ -28,7 +28,7 @@ import Network.IRC.Client
     ( IRC, IRCState, Event(..), EventHandler(..), Source(..), Message(..)
     , ConnectionConfig, InstanceConfig, plainConnection, defaultInstanceConfig
     , runClientWith, channels, nick, password, send, onconnect, handlers
-    , newIRCState, runIRCAction
+    , newIRCState, runIRCAction, instanceConfig
     )
 
 import qualified Data.ByteString as B
@@ -221,6 +221,7 @@ handleQueues
        , GetSubscribers m
        , AddSubscription m
        , GetTime m
+       , GetUserName m
        )
     => m ()
 handleQueues = forever $
@@ -239,6 +240,7 @@ handleDaemonMessage
        , AddSubscription m
        , UpdateChannelLog m
        , GetTime m
+       , GetUserName m
        )
     => ClientId
     -> DaemonMsg
@@ -266,7 +268,8 @@ handleDaemonMessage clientId = \case
             (Privmsg (getChannelName channelName) $ Right messageContents)
         -- TODO: Use username from server data!
         time <- getTime
-        let message = Message messageContents (UserName "ME") time
+        myNick <- getCurrentUserName serverName
+        let message = Message messageContents myNick time
         updateChannelLog messageTarget message
         clients <- getSubscribers messageTarget
         forM_ clients $ \subscriberId ->
@@ -482,6 +485,24 @@ class Monad m => GetTime m where
 
 instance MonadIO m => GetTime (ReaderT env m) where
     getTime = liftIO getZonedTime
+
+
+class Monad m => GetUserName m where
+    getCurrentUserName :: ServerName -> m UserName
+
+instance (HasServerMap env, HasDefaultUserName env, MonadIO m) => GetUserName (ReaderT env m) where
+    getCurrentUserName serverName =
+        getServerData serverName >>= \case
+            Nothing ->
+                asks getDefaultUser
+            Just serverData -> do
+                let mState = snd <$> serverThread serverData
+                case mState of
+                    Nothing ->
+                        asks getDefaultUser
+                    Just ircState -> do
+                        config <- liftIO $ readTVarIO $ ircState ^. instanceConfig
+                        return . UserName $ config ^. nick
 
 
 

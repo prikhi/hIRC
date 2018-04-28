@@ -117,8 +117,8 @@ newtype UserName
         } deriving (Show, Generic)
 instance Binary UserName
 
--- TODO Eventually add UserNames
--- Split into ChannelMessage & ServerMessage
+-- TODO Will need some way to signify channel & server messages(e.g., topic
+-- change).
 data ChatMessage
     = Message
         { messageText :: T.Text
