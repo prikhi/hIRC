@@ -3,7 +3,8 @@ module HIrc where
 
 import Control.Concurrent.STM (TQueue)
 import Control.Concurrent.STM.TMQueue (TMQueue)
-import Data.Binary (Binary)
+import Data.Binary.Orphans (Binary)
+import Data.Time (ZonedTime)
 import GHC.Generics (Generic)
 
 import qualified Data.Text as T
@@ -55,11 +56,12 @@ newtype ClientId
 
 instance Binary ClientId
 
--- TODO Eventually add time & username
--- Split into ChannelMessage & ServerMessage?
-newtype ChatMessage
+-- TODO Eventually add UserNames
+-- Split into ChannelMessage & ServerMessage
+data ChatMessage
     = Message
-        { getMessage :: T.Text
+        { messageText :: T.Text
+        , messageTime :: ZonedTime
         } deriving (Generic, Show)
 
 instance Binary ChatMessage

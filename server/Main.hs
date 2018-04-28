@@ -22,6 +22,7 @@ import Data.Conduit.Serialization.Binary (conduitEncode, conduitDecode)
 import Data.Conduit.TQueue (sinkTQueue, sourceTMQueue)
 import Data.Maybe (fromMaybe)
 import Data.Monoid ((<>))
+import Data.Time (ZonedTime, getZonedTime)
 import Network.IRC.Client
     ( IRC, IRCState, Event(..), EventHandler(..), Source(..), Message(..)
     , ConnectionConfig, InstanceConfig, plainConnection, defaultInstanceConfig
@@ -131,11 +132,13 @@ connectToServer defaultName serverName config = do
                 Nothing ->
                     return ()
         -- TODO: Expand to handle more Message types
+        -- Maybe pass all events to queue & filter/transform in main
+        -- thread.
         receiveMessageHandler :: IrcQueue -> EventHandler s
         receiveMessageHandler ircQueue =
             EventHandler matcher handler
             where
-                matcher :: Event T.Text -> Maybe IrcMsg
+                matcher :: Event T.Text -> Maybe (ZonedTime -> IrcMsg)
                 matcher ev =
                     case (_message ev, _source ev) of
                         (Privmsg _ (Right msg), Channel name senderNick) ->
@@ -143,12 +146,14 @@ connectToServer defaultName serverName config = do
                                 serverName
                                 (ChannelName name)
                                 (UserName senderNick)
-                                (Message msg)
+                                . Message msg
                         _ ->
                             Nothing
-                handler :: Source T.Text -> IrcMsg -> IRC s ()
+                handler :: Source T.Text -> (ZonedTime -> IrcMsg) -> IRC s ()
                 handler _ msg =
-                    liftIO $ atomically $ writeTQueue ircQueue msg
+                    liftIO
+                        $ getZonedTime
+                        >>= atomically . writeTQueue ircQueue . msg
 
 -- | Run the unix socket server, piping together the queues & socket
 -- clients.
@@ -214,6 +219,7 @@ handleQueues
        , CloseClientQueue m
        , GetSubscribers m
        , AddSubscription m
+       , GetTime m
        )
     => m ()
 handleQueues = forever $
@@ -231,6 +237,7 @@ handleDaemonMessage
        , GetSubscribers m
        , AddSubscription m
        , UpdateChannelLog m
+       , GetTime m
        )
     => ClientId
     -> DaemonMsg
@@ -254,7 +261,10 @@ handleDaemonMessage clientId = \case
     -- Send the message to the IRC server
     SendMessage serverName channelName message -> do
         sendIrcMessage serverName
-            (Privmsg (getChannelName channelName) $ Right (getMessage message))
+            (Privmsg (getChannelName channelName) $ Right (messageContents message))
+        -- TODO: Use username from server data!
+        time <- getTime
+        let message = Message messageContents time
         updateChannelLog serverName channelName (UserName "ME") message
         clients <- getSubscribers (serverName, channelName)
         forM_ clients $ \subscriberId ->
@@ -457,6 +467,14 @@ instance (HasSubscriptions env, MonadIO m) => GetSubscribers (ReaderT env m) whe
     getSubscribers k = do
         tvar <- asks getSubscriptions
         fromMaybe [] . M.lookup k <$> liftIO (readTVarIO tvar)
+
+
+class Monad m => GetTime m where
+    getTime :: m ZonedTime
+
+instance MonadIO m => GetTime (ReaderT env m) where
+    getTime = liftIO getZonedTime
+
 
 
 -- Env Typeclasses
