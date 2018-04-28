@@ -1,5 +1,7 @@
 # hIRC
 
+[![hIRC Travis-CI Build Status](https://travis-ci.org/prikhi/hIRC.svg?branch=master)](https://travis-ci.org/prikhi/hIRC)
+
 `hIRC` is an IRC client that is split into a connection daemon & channel viewer
 client. The daemon is responsible for connecting, authenticating, & sending
 messages to IRC servers. The client provides a UI for you to view & send
