@@ -28,7 +28,8 @@ import Network.IRC.Client
     ( IRC, IRCState, Event(..), EventHandler(..), Source(..), Message(..)
     , ConnectionConfig, InstanceConfig, plainConnection, defaultInstanceConfig
     , runClientWith, channels, nick, password, send, onconnect, handlers
-    , newIRCState, runIRCAction, instanceConfig
+    , newIRCState, runIRCAction, instanceConfig, tlsConnection, TLSConfig(..)
+    , username, realname
     )
 
 import qualified Data.ByteString as B
@@ -112,7 +113,15 @@ connectToServer defaultName serverName config = do
     let name = fromMaybe defaultName $ userName config
         host = serverHost config
         port = serverPort config
-        conn = plainConnection (getServerHost host) (getServerPort port)
+        baseConfig =
+            case security config of
+                Plain ->
+                    plainConnection
+                TLS ->
+                    \h p -> tlsConnection (WithDefaultConfig h p)
+        conn = baseConfig (getServerHost host) (getServerPort port)
+            & username .~ getUserName name
+            & realname .~ getUserName name
             & password .~ (getPassword <$> serverPassword config)
             & onconnect %~ (>> identify name)
         conf = defaultInstanceConfig (getUserName name)
