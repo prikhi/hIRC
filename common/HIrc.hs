@@ -9,7 +9,8 @@ import GHC.Generics (Generic)
 
 import qualified Data.Text as T
 
--- Messages & Queues
+
+-- Client
 
 -- | A closeable queue for messages to a Client.
 type ClientQueue
@@ -18,16 +19,41 @@ type ClientQueue
 -- | Messages Daemons can send to a Client
 -- TODO: NewServer, NewChannel, ServerMessage
 data ClientMsg
-    = Hello ClientId [(ServerName, ChannelName)]
+    = Hello HelloData
     -- ^ Provide the client with an initial list of channels.
-    | Subscriptions [((ServerName, ChannelName), [ChatMessage])]
+    | Subscriptions SubscriptionsData
     -- ^ Initial channel data returned after a `Subscribe` message.
-    | NewMessage ServerName ChannelName ChatMessage
+    | NewMessage NewMessageData
     -- ^ A new message has arrived in the channel.
-    deriving (Generic, Show)
-
+    deriving (Show, Generic)
 instance Binary ClientMsg
 
+data HelloData
+    = HelloData
+        { yourClientId :: ClientId
+        -- ^ The ID the Client Should Use in `DaemonRequests`.
+        , availableChannels :: [(ServerName, ChannelName)]
+        -- ^ The Channels the Client Can Subscribe To.
+        } deriving (Show, Generic)
+instance Binary HelloData
+
+-- | TODO: Maybe just send a Map the Client can union with their Map.
+newtype SubscriptionsData
+    = SubscriptionsData
+        { subscriptionLogs :: [((ServerName, ChannelName), [ChatMessage])]
+        -- ^ The Chat Logs for Each Newly Subscribed Channel
+        } deriving (Show, Generic)
+instance Binary SubscriptionsData
+
+data NewMessageData
+    = NewMessageData
+        { newMessageTarget :: (ServerName, ChannelName)
+        , newMessage :: ChatMessage
+        } deriving (Show, Generic)
+instance Binary NewMessageData
+
+
+-- Daemon
 
 -- | A queue containing message from Clients to the Daemon
 type DaemonQueue

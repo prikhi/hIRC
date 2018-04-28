@@ -1,4 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
@@ -32,6 +33,9 @@ import HIrc
 
 TODO:
 
+* There's some functionality repeated in `handleEvent` & the server(like
+  channel log updates). Should move those typeclasses from server to common
+  & use them here.
 * Introduce the idea of "Panes"(horizontal/vertical split windows). Add
   keybindings to open/close/navigate panes as well as changing the channel
   shown in the current pane
@@ -177,25 +181,25 @@ handleEvent s = \case
             -- TODO: Some way to select channels - either start blank w/
             -- ability to add channels to a view, or group channels & start
             -- based on flag.
-            Hello clientId channelList -> do
-                let updatedState = s { appClientId = Just clientId }
+            Hello HelloData { yourClientId, availableChannels } -> do
+                let updatedState = s { appClientId = Just yourClientId }
                 sendDaemonMessage updatedState $ Subscribe SubscribeData
-                    { requestedChannels = channelList
+                    { requestedChannels = availableChannels
                     }
                 continue updatedState
             -- Update the Message Logs.
             -- TODO: Insert only new channel's logs so we can send Subscribe
             -- events for new channels without replacing existing logs.
-            Subscriptions ss ->
+            Subscriptions SubscriptionsData { subscriptionLogs } ->
                 continue s
-                    { appChannelData = M.fromList $ map (second reverse) ss
-                    , appCurrentChannel = fst <$> listToMaybe ss
+                    { appChannelData = M.fromList $ map (second reverse) subscriptionLogs
+                    , appCurrentChannel = fst <$> listToMaybe subscriptionLogs
                     }
             -- Add Message to Channel's Log
-            NewMessage serverName channelName message ->
+            NewMessage NewMessageData { newMessageTarget, newMessage } ->
                 continue s
                     { appChannelData =
-                        M.adjust (++ [message]) (serverName, channelName) $ appChannelData s
+                        M.adjust (++ [newMessage]) newMessageTarget $ appChannelData s
                     }
     _ ->
         -- Ignore the Mouse Up/Down Events

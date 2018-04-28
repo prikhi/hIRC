@@ -144,8 +144,7 @@ connectToServer defaultName serverName config = do
                     case (_message ev, _source ev) of
                         (Privmsg _ (Right msg), Channel name senderNick) ->
                             Just $ ReceiveMessage
-                                serverName
-                                (ChannelName name)
+                                (serverName, ChannelName name)
                                 (UserName senderNick)
                                 . Message msg
                         _ ->
@@ -184,10 +183,12 @@ runSocketServer = do
         handleConnection dataMapRef idRef clientQueues daemonQueue connection = do
             chanList <- makeChanList dataMapRef
             clientId <- runReaderT nextClientId idRef
+            let helloMessage = Hello HelloData
+                    { yourClientId = clientId, availableChannels = chanList }
             clientQueue <- atomically $ do
                 queue <- newTMQueue
                 modifyTVar clientQueues $ M.insert clientId queue
-                writeTMQueue queue $ Hello clientId chanList
+                writeTMQueue queue helloMessage
                 return queue
             asyncConduits
                 [ sourceTMQueue clientQueue .| conduitEncode .| appSink connection
@@ -249,7 +250,7 @@ handleDaemonMessage clientId = \case
     Subscribe SubscribeData { requestedChannels } -> do
         mapM_ (subscribe clientId) requestedChannels
         subscriptions <- mapM (\c -> (c,) <$> getMessages c) requestedChannels
-        sendClientMessage clientId $ Subscriptions subscriptions
+        sendClientMessage clientId $ Subscriptions $ SubscriptionsData subscriptions
         where
             getMessages
                 :: (GetServerData m) => (ServerName, ChannelName) -> m [ChatMessage]
@@ -259,7 +260,7 @@ handleDaemonMessage clientId = \case
                         return []
                     Just sData ->
                         return $ maybe [] messageLog $ M.lookup channelName (channelMap sData)
-    -- Send the message to the IRC server
+    -- Send the message to the IRC server & subscribed clients.
     SendMessage SendMessageData { messageTarget, messageContents } -> do
         let (serverName, channelName) = messageTarget
         sendIrcMessage serverName
@@ -267,11 +268,15 @@ handleDaemonMessage clientId = \case
         -- TODO: Use username from server data!
         time <- getTime
         let message = Message messageContents time
-        updateChannelLog serverName channelName (UserName "ME") message
+        updateChannelLog messageTarget (UserName "ME") message
         clients <- getSubscribers (serverName, channelName)
         forM_ clients $ \subscriberId ->
             sendClientMessage subscriberId $
-                NewMessage serverName channelName message
+                NewMessage NewMessageData
+                    { newMessageTarget = messageTarget
+                    , newMessage = message
+                    }
+    -- Close the Client's Queue.
     Goodbye ->
         closeClientQueue clientId
 
@@ -281,12 +286,14 @@ handleIrcMessage
     -> m ()
 handleIrcMessage = \case
     -- Store the message & send it to the appropriate clients
-    ReceiveMessage serverName channelName user message -> do
-        updateChannelLog serverName channelName user message
-        clients <- getSubscribers (serverName, channelName)
+    ReceiveMessage target user message -> do
+        updateChannelLog target user message
+        clients <- getSubscribers target
         forM_ clients $ \clientId ->
-            sendClientMessage clientId $
-                NewMessage serverName channelName message
+            sendClientMessage clientId $ NewMessage NewMessageData
+                { newMessageTarget = target
+                , newMessage = message
+                }
 
 
 
@@ -352,10 +359,10 @@ instance (HasDaemonQueue env, HasIrcQueue env, MonadIO m) => ReadQueues (ReaderT
 -- | Manipulate the Message Log for a Channel
 class Monad m => UpdateChannelLog m where
     -- | Add a message to the log.
-    updateChannelLog :: ServerName -> ChannelName -> UserName -> ChatMessage -> m ()
+    updateChannelLog :: (ServerName, ChannelName) -> UserName -> ChatMessage -> m ()
 
 instance (HasServerMap env, MonadIO m) => UpdateChannelLog (ReaderT env m) where
-    updateChannelLog serverName channelName _ message =
+    updateChannelLog (serverName, channelName) _ message =
         updateServerData serverName
             $ fmap (\d -> d { channelMap = updateChannelMap $ channelMap d })
         where
@@ -569,7 +576,7 @@ type IrcQueue
     = TQueue IrcMsg
 
 data IrcMsg
-    = ReceiveMessage ServerName ChannelName UserName ChatMessage
+    = ReceiveMessage (ServerName, ChannelName) UserName ChatMessage
     deriving (Show)
 
 data Config
