@@ -252,9 +252,7 @@ renderMessageLog s =
                 [ str
                     $ formatTime defaultTimeLocale "%d.%H:%M:%S"
                     $ messageTime m
-                , txt " "
-                , vLimit 1 vBorder
-                , txt " "
+                , padLeftRight 1 $ vLimit 1 vBorder
                 , wrap $ messageText m
                 ]
         -- Wrap text, breaking inside words if necessary
