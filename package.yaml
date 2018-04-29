@@ -43,7 +43,9 @@ library:
   source-dirs: common
   dependencies:
     - binary-orphans
+    - mtl
     - stm-chans
+    - xdg-basedir
 
 executables:
   hirc:

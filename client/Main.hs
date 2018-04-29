@@ -110,10 +110,10 @@ main = do
 
 
 -- | Connect to the Daemon's socket.
--- TODO: Socket should live in XDG cache or data dir.
 connectToDaemon :: DaemonQueue -> BChan ClientMsg -> IO ()
-connectToDaemon daemonQueue clientChan =
-    runUnixClient (clientSettings "hircd.sock") handler
+connectToDaemon daemonQueue clientChan = do
+    socketPath <- getSocketPath
+    runUnixClient (clientSettings socketPath) handler
     where
         -- Connect the Client TQueue & BChan to the Daemon Socket.
         handler :: AppDataUnix -> IO ()

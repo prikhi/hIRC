@@ -172,13 +172,15 @@ runSocketServer
        , MonadReader env m
        , MonadBaseControl IO m
        , RunSocketServer m
+       , GetSocketPath m
        )
     => m (Async (StM m ()))
 runSocketServer = do
     serverMap <- asks getServerMap
     clientId <- asks getNextClientId
     clientQueues <- asks getClientQueues
-    async $ runDaemonServer "hircd.sock"
+    socketPath <- getSocketPath
+    async $ runDaemonServer socketPath
         (handleConnection serverMap clientId clientQueues)
     where
         handleConnection

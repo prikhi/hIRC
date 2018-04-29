@@ -3,9 +3,12 @@ module HIrc where
 
 import Control.Concurrent.STM (TQueue)
 import Control.Concurrent.STM.TMQueue (TMQueue)
+import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.Reader (ReaderT)
 import Data.Binary.Orphans (Binary)
 import Data.Time (ZonedTime)
 import GHC.Generics (Generic)
+import System.Environment.XDG.BaseDir (getUserDataFile)
 
 import qualified Data.Text as T
 
@@ -141,3 +144,18 @@ newtype ChannelName
         } deriving (Eq, Ord, Generic, Show)
 
 instance Binary ChannelName
+
+
+
+-- Classes
+
+class Monad m => GetSocketPath m where
+    getSocketPath :: m FilePath
+
+instance GetSocketPath IO where
+    getSocketPath =
+        getUserDataFile "hirc" "daemon.sock"
+
+instance MonadIO m => GetSocketPath (ReaderT env m) where
+    getSocketPath =
+        liftIO getSocketPath
