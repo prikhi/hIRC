@@ -8,7 +8,8 @@ import Control.Monad.Reader (ReaderT)
 import Data.Binary.Orphans (Binary)
 import Data.Time (ZonedTime)
 import GHC.Generics (Generic)
-import System.Environment.XDG.BaseDir (getUserDataFile)
+import System.Directory (createDirectoryIfMissing)
+import System.Environment.XDG.BaseDir (getUserDataDir, getUserDataFile)
 
 import qualified Data.Text as T
 
@@ -153,8 +154,10 @@ class Monad m => GetSocketPath m where
     getSocketPath :: m FilePath
 
 instance GetSocketPath IO where
-    getSocketPath =
-        getUserDataFile "hirc" "daemon.sock"
+    getSocketPath = do
+        let dirName = "hirc"
+        getUserDataDir dirName >>= createDirectoryIfMissing True
+        getUserDataFile dirName "daemon.sock"
 
 instance MonadIO m => GetSocketPath (ReaderT env m) where
     getSocketPath =

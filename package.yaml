@@ -43,6 +43,7 @@ library:
   source-dirs: common
   dependencies:
     - binary-orphans
+    - directory
     - mtl
     - stm-chans
     - xdg-basedir
