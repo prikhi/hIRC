@@ -23,7 +23,6 @@ import Data.Conduit.Network.Unix (AppDataUnix, serverSettings, runUnixServer, ap
 import Data.Conduit.Serialization.Binary (conduitEncode, conduitDecode)
 import Data.Conduit.TQueue (sinkTQueue, sourceTMQueue)
 import Data.Maybe (fromMaybe, listToMaybe)
-import Data.Monoid ((<>))
 import Data.Text.Encoding (encodeUtf8)
 import Data.Time (ZonedTime, getZonedTime)
 import Data.Yaml.Config (loadYamlSettings, ignoreEnv)
@@ -116,24 +115,16 @@ connectToServer defaultName serverName config = do
             & username .~ getUserName name
             & realname .~ getUserName name
             & password .~ (getPassword <$> serverPassword config)
-            & onconnect %~ (>> identify name)
+            & onconnect %~ (>> sendCommands (serverCommands config))
         conf = defaultInstanceConfig (getUserName name)
             & nick .~ getUserName name
             & channels .~ map getChannelName (defaultChannels config)
             & handlers %~ (receiveMessageHandler ircQueue :)
     connectToIrcServer serverName conn conf
     where
-        -- TODO: ServerConfig should specify these commands because they are dependent on the IRC server
-        identify :: UserName -> IRC s ()
-        identify name =
-            case serverPassword config of
-                Just (Password pass) -> do
-                    send . RawMsg
-                        $ "ACC REGISTER " <> getUserName name <> " * passphrase :" <> pass
-                    send . Privmsg "NickServ" . Right
-                        $ "IDENTIFY " <> getUserName name <> " " <> pass
-                Nothing ->
-                    return ()
+        sendCommands :: [Command] -> IRC s ()
+        sendCommands =
+            mapM_ (send . RawMsg . getCommand)
         -- TODO: Expand to handle more Message types
         -- Maybe pass all events to queue & filter/transform in main
         -- thread.
@@ -270,7 +261,6 @@ handleDaemonMessage clientId = \case
         let (ChannelId serverName channelName) = messageTarget
         sendIrcMessage serverName
             (Privmsg (getChannelName channelName) $ Right messageContents)
-        -- TODO: Use username from server data!
         time <- getTime
         myNick <- getCurrentUserName serverName
         let message = Message messageContents myNick time
@@ -618,6 +608,7 @@ data ServerConfig
         , serverPort :: ServerPort
         , security :: ServerSecurity
         , defaultChannels :: [ChannelName]
+        , serverCommands :: [Command]
         }
 
 data ServerData
@@ -654,6 +645,10 @@ newtype ServerPort
         { getServerPort :: Int
         }
 
+newtype Command
+    = Command
+        { getCommand :: T.Text
+        }
 
 
 -- Config Parsing
@@ -672,7 +667,8 @@ instance FromJSON ServerConfig where
             <*> v .: "host"
             <*> v .: "port"
             <*> parseSecurity v
-            <*> v .: "channels"
+            <*> (fromMaybe [] <$> v .:? "channels")
+            <*> (fromMaybe [] <$> v .:? "commands")
         where
             parseSecurity v = do
                 useTLS <- fromMaybe False <$> v .:? "use-tls"
@@ -689,3 +685,6 @@ instance FromJSON ServerHost where
 
 instance FromJSON ServerPort where
     parseJSON = withScientific "ServerPort" $ return . ServerPort . floor
+
+instance FromJSON Command where
+    parseJSON = withText "Command" $ return . Command

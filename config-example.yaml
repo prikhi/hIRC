@@ -16,7 +16,11 @@ servers:
         port: 6667
         # Whether to secure the connection with TLS
         use-tls: false
-        # A list of channels to join when connecting.
+        # A list of channels to join after connecting.
         channels:
             - "#test-channel"
             - "#other-channel"
+        # A list of IRC commands to send after connecting.
+        commands:
+            - ACC REGISTER hirc-test-user * passphrase :hunter2
+            - PrivMsg NickServ IDENTIFY hirc-test-user hunter2
