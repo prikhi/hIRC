@@ -42,6 +42,7 @@ dependencies:
 library:
   source-dirs: common
   dependencies:
+    - aeson
     - binary-orphans
     - directory
     - mtl
@@ -79,7 +80,7 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - hirc
-    - lifted-async
+    - aeson
     - binary-conduit
     - bytestring
     - conduit
@@ -87,11 +88,14 @@ executables:
     - containers
     - irc-client
     - lens
+    - lifted-async
     - monad-control
     - mtl
     - safe-exceptions
     - stm-chans
     - stm-conduit
+    - xdg-basedir
+    - yaml
 
 tests:
   hirc-test:

@@ -7,11 +7,14 @@ client. The daemon is responsible for connecting, authenticating, & sending
 messages to IRC servers. The client provides a UI for you to view & send
 messages to channels.
 
-## Develop
+
+## Build / Run
 
 You should test against a local IRC server, something like `oragono`:
 
     sudo packer -S oragono
+    mkdir ircd; cd ircd;
+    oragono initdb; oragono run
 
 Then build and run the daemon:
 
@@ -21,6 +24,20 @@ Then build and run the daemon:
 And run the client in another terminal:
 
     stack exec hirc
+
+Press `Enter` to send messages & `Control-q` to quit.
+
+
+## Configuration
+
+The configuration file is written in YAML and should live at
+`~/.config/hirc/config.yaml`. See the `config-example.yaml` file in this
+repository for a documented example.
+
+By default, `hircd` will look in `~/.config/hirc` for a `config.yaml` file. You
+can also pass one via the command line:
+
+    stack exec hircd config-example.yaml
 
 
 ## Motivation

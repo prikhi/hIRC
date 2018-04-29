@@ -1,0 +1,22 @@
+---
+
+# The Default User Name
+default-user-name: hirc-test-user
+
+# The Servers to Connect to.
+servers:
+    oragono:
+        # Override the default user name
+        # user-name:
+        # Authenticate with a password
+        # password:
+        # The hostname to connect to
+        host: localhost
+        # The port to connect to
+        port: 6667
+        # Whether to secure the connection with TLS
+        use-tls: false
+        # A list of channels to join when connecting.
+        channels:
+            - "#test-channel"
+            - "#other-channel"

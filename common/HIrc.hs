@@ -5,6 +5,7 @@ import Control.Concurrent.STM (TQueue)
 import Control.Concurrent.STM.TMQueue (TMQueue)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (ReaderT)
+import Data.Aeson (FromJSON(..), FromJSONKey(..), FromJSONKeyFunction(..), withText)
 import Data.Binary.Orphans (Binary)
 import Data.Time (ZonedTime)
 import GHC.Generics (Generic)
@@ -162,3 +163,21 @@ instance GetSocketPath IO where
 instance MonadIO m => GetSocketPath (ReaderT env m) where
     getSocketPath =
         liftIO getSocketPath
+
+
+
+-- JSON Parsing - Used for Daemon Config Parsing
+
+instance FromJSON UserName where
+    parseJSON =
+        withText "UserName" $ return . UserName
+
+instance FromJSON ChannelName where
+    parseJSON = withText "ChannelName" $ return . ChannelName
+
+instance FromJSON ServerName where
+    parseJSON =
+        withText "ServerName" $ return . ServerName
+instance FromJSONKey ServerName where
+    fromJSONKey =
+        FromJSONKeyText ServerName

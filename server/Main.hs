@@ -17,13 +17,16 @@ import Control.Lens ((&), (.~), (%~), (^.))
 import Control.Monad (void, forever, forM_)
 import Control.Monad.Reader (MonadIO, MonadReader, ReaderT, runReaderT, asks, liftIO)
 import Control.Monad.Trans.Control (MonadBaseControl, StM)
+import Data.Aeson ((.:), (.:?), FromJSON(..),withObject, withText, withScientific)
 import Data.Conduit ((.|), ConduitT, Void, runConduit)
 import Data.Conduit.Network.Unix (AppDataUnix, serverSettings, runUnixServer, appSource, appSink)
 import Data.Conduit.Serialization.Binary (conduitEncode, conduitDecode)
 import Data.Conduit.TQueue (sinkTQueue, sourceTMQueue)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, listToMaybe)
 import Data.Monoid ((<>))
+import Data.Text.Encoding (encodeUtf8)
 import Data.Time (ZonedTime, getZonedTime)
+import Data.Yaml.Config (loadYamlSettings, ignoreEnv)
 import Network.IRC.Client
     ( IRC, IRCState, Event(..), EventHandler(..), Source(..), Message(..)
     , ConnectionConfig, InstanceConfig, plainConnection, defaultInstanceConfig
@@ -31,6 +34,8 @@ import Network.IRC.Client
     , newIRCState, runIRCAction, instanceConfig, tlsConnection, TLSConfig(..)
     , username, realname
     )
+import System.Environment (getArgs)
+import System.Environment.XDG.BaseDir (getUserConfigFile)
 
 import qualified Data.ByteString as B
 import qualified Data.Map as M
@@ -53,9 +58,12 @@ main = do
 -- & Channel messages to all subscribed clients.
 
 -- | Create the Message Queues & the Initial IRC Server Data.
+-- TODO: Refactor config parsing into function, handle exceptions w/ default config
 initialize :: IO Env
 initialize = do
-    let config = testConfig
+    defaultConfigPath <- getUserConfigFile "hirc" "config.yaml"
+    configPath <- fromMaybe defaultConfigPath . listToMaybe <$> getArgs
+    config <- loadYamlSettings [configPath] [] ignoreEnv
     (cQueues, dQueue, iQueue) <- (,,) <$> newTVarIO M.empty <*> newTQueueIO <*> newTQueueIO
     serverData <- newTVarIO M.empty
     nextClient <- newTVarIO (ClientId 1)
@@ -69,21 +77,6 @@ initialize = do
         , envNextClientId = nextClient
         , envSubscriptions = subscriptions
         }
-
-testConfig :: Config
-testConfig =
-    Config (UserName "test-user") $ M.fromList
-        [ ( ServerName "TestServer"
-          , ServerConfig
-            { userName = Nothing
-            , serverPassword = Just $ Password "test"
-            , serverHost = ServerHost "localhost"
-            , serverPort = ServerPort 6667
-            , security = Plain
-            , defaultChannels = map ChannelName ["#test-channel", "#other-channel"]
-            }
-          )
-        ]
 
 
 -- | Connect to all the IRC Servers Specified in the `Config`.
@@ -337,6 +330,7 @@ class Monad m => IrcConnection m where
 instance (HasServerMap env, MonadIO m) => IrcConnection (ReaderT env m) where
     -- | Run the IRC client in a separate thread & save the Async value to
     -- the Server's `ServerData`.
+    -- TODO: forever + bracket, print exceptions
     connectToIrcServer name conn conf = do
         ircState <- newIRCState conn conf ()
         connectionThread <- liftIO . async $ runClientWith ircState
@@ -656,5 +650,42 @@ newtype ServerHost
         }
 
 newtype ServerPort
-    = ServerPort { getServerPort :: Int
+    = ServerPort
+        { getServerPort :: Int
         }
+
+
+
+-- Config Parsing
+
+instance FromJSON Config where
+    parseJSON = withObject "Config" $ \v ->
+        Config
+            <$> v .: "default-user-name"
+            <*> v .: "servers"
+
+instance FromJSON ServerConfig where
+    parseJSON = withObject "ServerConfig" $ \v ->
+        ServerConfig
+            <$> v .:? "user-name"
+            <*> v .:? "password"
+            <*> v .: "host"
+            <*> v .: "port"
+            <*> parseSecurity v
+            <*> v .: "channels"
+        where
+            parseSecurity v = do
+                useTLS <- fromMaybe False <$> v .:? "use-tls"
+                if useTLS then
+                    return TLS
+                else
+                    return Plain
+
+instance FromJSON Password where
+    parseJSON = withText "Password" $ return . Password
+
+instance FromJSON ServerHost where
+    parseJSON = withText "ServerHost" $ return . ServerHost . encodeUtf8
+
+instance FromJSON ServerPort where
+    parseJSON = withScientific "ServerPort" $ return . ServerPort . floor
