@@ -19,6 +19,7 @@ import Data.Conduit.Serialization.Binary (conduitEncode, conduitDecode)
 import Data.Conduit.Network.Unix (AppDataUnix, clientSettings, runUnixClient, appSource, appSink)
 import Data.Conduit.TQueue (sourceTQueue)
 import Data.Maybe (listToMaybe)
+import Data.Monoid ((<>))
 import Data.Time (formatTime, defaultTimeLocale)
 import Text.Wrap (WrapSettings(breakLongWords), defaultWrapSettings)
 
@@ -39,6 +40,10 @@ TODO:
 * Introduce the idea of "Panes"(horizontal/vertical split windows). Add
   keybindings to open/close/navigate panes as well as changing the channel
   shown in the current pane
+* Startup should display "Channel Selection" list, use to pick channel to
+  subscribe to
+* When switching between channels, should we retain the input form text, or
+  keep the input form text on a per-channel basis?
 * Add usernames to message logs
 * Server/Status log like in irssi
 * Show Bar with Channel Name & Topic
@@ -79,13 +84,18 @@ newtype InputForm
 
 makeLenses ''InputForm
 
--- TODO: Prepend w/ Channel Name: `[#xmonad] Hello world!`
-inputForm :: Form InputForm AppEvent AppWidget
-inputForm =
-    newForm
-     [ (txt "$ " <+>) @@= editTextField input InputField Nothing
-     ]
-     (InputForm "")
+-- | Create a blank input form, labeled by the current channel's name.
+inputForm :: Maybe ChannelId -> Form InputForm AppEvent AppWidget
+inputForm maybeChannel =
+    let
+        channelName =
+            maybe "$ " (\(ChannelId _ n) -> "[" <> getChannelName n <> "] ")
+                maybeChannel
+    in
+        newForm
+            [ (txt channelName <+>) @@= editTextField input InputField Nothing
+            ]
+            (InputForm "")
 
 
 -- | Create the Communication Channels, Connect to the Daemon & Run the UI.
@@ -105,7 +115,7 @@ main = do
                 , appChannelData = M.empty
                 , appClientId = Nothing
                 , appCurrentChannel = Nothing
-                , appInputForm = inputForm
+                , appInputForm = inputForm Nothing
                 }
 
 
@@ -167,7 +177,7 @@ handleEvent s = \case
                                     { messageTarget = channelId
                                     , messageContents = message
                                     }
-                            continue s { appInputForm = inputForm }
+                            continue s { appInputForm = inputForm (Just channelId) }
                 else
                     continue s
 
@@ -191,9 +201,11 @@ handleEvent s = \case
             -- TODO: Insert only new channel's logs so we can send Subscribe
             -- events for new channels without replacing existing logs.
             Subscriptions SubscriptionsData { subscriptionLogs } ->
+                let newChannel = fst <$> listToMaybe subscriptionLogs in
                 continue s
                     { appChannelData = M.fromList $ map (second reverse) subscriptionLogs
-                    , appCurrentChannel = fst <$> listToMaybe subscriptionLogs
+                    , appCurrentChannel = newChannel
+                    , appInputForm = inputForm newChannel
                     }
             -- Add Message to Channel's Log
             NewMessage NewMessageData { newMessageTarget, newMessage } ->
