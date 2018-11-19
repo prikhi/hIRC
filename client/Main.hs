@@ -145,8 +145,17 @@ app =
         , appChooseCursor = showFirstCursor
         , appHandleEvent = handleEvent
         , appStartEvent = return
-        , appAttrMap = const $ attrMap V.defAttr []
+        , appAttrMap = const colorMap
         }
+
+colorMap :: AttrMap
+colorMap =
+    attrMap V.defAttr
+        [ (topicAttr, V.black `on` V.white)
+        ]
+
+topicAttr :: AttrName
+topicAttr = "topic"
 
 
 -- Update
@@ -219,6 +228,19 @@ handleEvent s = \case
                             newMessageTarget
                         $ appChannelData s
                     }
+            -- Update Channel Topic & Add to Log
+            NewTopic NewMessageData { newMessageTarget, newMessage } ->
+                continue s
+                    { appChannelData =
+                        M.adjust
+                            (\d -> d
+                                { messageLog = messageLog d ++ [newMessage]
+                                , channelTopic = ChannelTopic $ messageText newMessage
+                                }
+                            )
+                            newMessageTarget
+                        $ appChannelData s
+                    }
     _ ->
         -- Ignore the Mouse Up/Down Events
         continue s
@@ -246,9 +268,27 @@ draw s =
 renderCurrentView :: AppState -> Widget AppWidget
 renderCurrentView s =
     vBox
-        [ padBottom Max $ renderMessageLog s
+        [ renderTopic s
+        , padBottom Max $ renderMessageLog s
         , vLimit 1 $ renderForm (appInputForm s)
         ]
+
+
+renderTopic :: AppState -> Widget AppWidget
+renderTopic s =
+    let
+        topicText =
+            case appCurrentChannel s >>= flip M.lookup (appChannelData s) of
+                Just ChannelData { channelTopic } ->
+                    getChannelTopic channelTopic
+                Nothing ->
+                    ""
+    in
+        withAttr topicAttr
+            $ vLimit 1
+            $ padLeft (Pad 1)
+            $ padRight Max
+            $ txt topicText
 
 
 -- | Render the Message Log for a Channel.
@@ -268,20 +308,32 @@ renderMessageLog s =
         -- Render a single Channel Message
         renderMessage :: ChannelMessage -> Widget AppWidget
         renderMessage m =
-            padRight Max $ hBox
-                [ str
-                    $ formatTime defaultTimeLocale "%d.%H:%M:%S"
-                    $ messageTime m
-                , padLeftRight 1 $ vLimit 1 vBorder
-                , vLimit 1
-                    $ hLimit maxNameLength
-                    $ padLeft Max
-                    $ txt
-                    $ getUserName
-                    $ messageUser m
-                , padLeftRight 1 $ txt ">"
-                , wrap $ messageText m
-                ]
+            let
+                line = case m of
+                    ChatMessage {} ->
+                        [ vLimit 1
+                            $ hLimit maxNameLength
+                            $ padLeft Max
+                            $ txt
+                            $ getUserName
+                            $ messageUser m
+                        , padLeftRight 1 $ txt ">"
+                        , wrap $ messageText m
+                        ]
+                    TopicMessage {} ->
+                        [ wrap $
+                            getUserName (messageUser m) <>
+                            " has set the channel topic to `" <>
+                            messageText m <>
+                            "`."
+                        ]
+            in
+                padRight Max $ hBox $
+                    [ str
+                        $ formatTime defaultTimeLocale "%d.%H:%M:%S"
+                        $ messageTime m
+                    , padLeftRight 1 $ vLimit 1 vBorder
+                    ] ++ line
         -- Wrap text, breaking inside words if necessary
         wrap :: T.Text -> Widget AppWidget
         wrap =

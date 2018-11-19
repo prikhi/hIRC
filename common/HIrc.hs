@@ -31,6 +31,7 @@ data ClientMsg
     -- ^ Initial channel data returned after a `Subscribe` message.
     | NewMessage NewMessageData
     -- ^ A new message has arrived in the channel.
+    | NewTopic NewMessageData
     deriving (Show, Generic)
 instance Binary ClientMsg
 
@@ -124,10 +125,17 @@ newtype UserName
         } deriving (Show, Generic)
 instance Binary UserName
 
+newtype ChannelTopic
+    = ChannelTopic
+        { getChannelTopic :: T.Text
+        } deriving (Show, Generic)
+instance Binary ChannelTopic
+
 data ChannelData
     = ChannelData
         { userList :: [UserName]
         , messageLog :: [ChannelMessage]
+        , channelTopic :: ChannelTopic
         } deriving (Show, Generic)
 instance Binary ChannelData
 
@@ -139,7 +147,13 @@ data ChannelMessage
         { messageText :: T.Text
         , messageUser :: UserName
         , messageTime :: ZonedTime
-        } deriving (Generic, Show)
+        }
+    | TopicMessage
+        { messageText :: T.Text
+        , messageUser :: UserName
+        , messageTime :: ZonedTime
+        }
+    deriving (Generic, Show)
 
 instance Binary ChannelMessage
 
