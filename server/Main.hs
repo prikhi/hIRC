@@ -138,7 +138,7 @@ connectToServer defaultName serverName config = do
                         (Privmsg _ (Right msg), Channel name senderNick) ->
                             Just $ ReceiveMessage
                                 (ChannelId serverName (ChannelName name))
-                                . Message msg (UserName senderNick)
+                                . ChatMessage msg (UserName senderNick)
                         _ ->
                             Nothing
                 handler :: Source T.Text -> (ZonedTime -> IrcMsg) -> IRC s ()
@@ -264,7 +264,7 @@ handleDaemonMessage clientId = \case
             (Privmsg (getChannelName channelName) $ Right messageContents)
         time <- getTime
         myNick <- getCurrentUserName serverName
-        let message = Message messageContents myNick time
+        let message = ChatMessage messageContents myNick time
         updateChannelLog messageTarget message
         clients <- getSubscribers messageTarget
         forM_ clients $ \subscriberId ->
@@ -357,7 +357,7 @@ instance (HasDaemonQueue env, HasIrcQueue env, MonadIO m) => ReadQueues (ReaderT
 -- | Manipulate the Message Log for a Channel
 class Monad m => UpdateChannelLog m where
     -- | Add a message to the log.
-    updateChannelLog :: ChannelId -> ChatMessage -> m ()
+    updateChannelLog :: ChannelId -> ChannelMessage -> m ()
 
 instance (HasServerMap env, MonadIO m) => UpdateChannelLog (ReaderT env m) where
     updateChannelLog (ChannelId serverName channelName) message =
@@ -592,7 +592,7 @@ type IrcQueue
     = TQueue IrcMsg
 
 data IrcMsg
-    = ReceiveMessage ChannelId ChatMessage
+    = ReceiveMessage ChannelId ChannelMessage
     deriving (Show)
 
 data Config
@@ -615,7 +615,7 @@ data ServerConfig
 data ServerData
     = ServerData
         { channelMap :: M.Map ChannelName ChannelData
-        , serverLog :: [ChatMessage]
+        , serverLog :: [ChannelMessage]
         , serverThread :: Maybe (Async (), IRCState ())
         }
 

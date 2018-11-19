@@ -54,7 +54,7 @@ instance Binary SubscriptionsData
 data NewMessageData
     = NewMessageData
         { newMessageTarget :: ChannelId
-        , newMessage :: ChatMessage
+        , newMessage :: ChannelMessage
         } deriving (Show, Generic)
 instance Binary NewMessageData
 
@@ -110,6 +110,7 @@ data ChannelId
     deriving (Show, Eq, Ord, Generic)
 instance Binary ChannelId
 
+-- | Clients are identified by an incrementing Integer.
 newtype ClientId
     = ClientId
         { getClientId :: Integer
@@ -126,21 +127,21 @@ instance Binary UserName
 data ChannelData
     = ChannelData
         { userList :: [UserName]
-        , messageLog :: [ChatMessage]
+        , messageLog :: [ChannelMessage]
         } deriving (Show, Generic)
 instance Binary ChannelData
 
 
 -- TODO Will need some way to signify channel & server messages(e.g., topic
 -- change).
-data ChatMessage
-    = Message
+data ChannelMessage
+    = ChatMessage
         { messageText :: T.Text
         , messageUser :: UserName
         , messageTime :: ZonedTime
         } deriving (Generic, Show)
 
-instance Binary ChatMessage
+instance Binary ChannelMessage
 
 newtype ServerName
     = ServerName

@@ -2,7 +2,7 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedStrings #-}
-module Main where
+module Main (main) where
 
 import Brick
 import Brick.BChan (BChan, newBChan, writeBChan)
@@ -263,9 +263,10 @@ renderMessageLog s =
                 [ txt "Connecting to Daemon..."
                 ]
     where
+        -- TODO: Pull into client config
         maxNameLength = 12
         -- Render a single Channel Message
-        renderMessage :: ChatMessage -> Widget AppWidget
+        renderMessage :: ChannelMessage -> Widget AppWidget
         renderMessage m =
             padRight Max $ hBox
                 [ str
