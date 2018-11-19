@@ -215,20 +215,7 @@ data QueueMsg
     deriving (Show)
 
 -- | Handle any incoming DaemonMsgs or IrcMsgs.
-handleQueues
-    :: ( UpdateChannelLog m
-       , UpdateChannelTopic m
-       , SendClientMessage m
-       , ReadQueues m
-       , SendIrcMessage m
-       , GetServerData m
-       , CloseClientQueue m
-       , GetSubscribers m
-       , AddSubscription m
-       , GetTime m
-       , GetUserName m
-       )
-    => m ()
+handleQueues :: ReaderT Env IO ()
 handleQueues = forever $
     readQueueMessage >>= \case
         DaemonQueueMsg msg ->
