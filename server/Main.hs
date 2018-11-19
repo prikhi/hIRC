@@ -136,7 +136,7 @@ connectToServer defaultName serverName config = do
                 matcher ev =
                     case (_message ev, _source ev) of
                         (Privmsg _ (Right msg), Channel name senderNick) ->
-                            Just $ ReceiveMessage
+                            Just $ ReceivedMessage
                                 (ChannelId serverName (ChannelName name))
                                 . ChatMessage msg (UserName senderNick)
                         _ ->
@@ -283,7 +283,7 @@ handleIrcMessage
     -> m ()
 handleIrcMessage = \case
     -- Store the message & send it to the appropriate clients
-    ReceiveMessage target message -> do
+    ReceivedMessage target message -> do
         updateChannelLog target message
         clients <- getSubscribers target
         forM_ clients $ \clientId ->
@@ -592,7 +592,7 @@ type IrcQueue
     = TQueue IrcMsg
 
 data IrcMsg
-    = ReceiveMessage ChannelId ChannelMessage
+    = ReceivedMessage ChannelId ChannelMessage
     deriving (Show)
 
 data Config
