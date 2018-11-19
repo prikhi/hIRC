@@ -199,21 +199,26 @@ handleEvent s = \case
                     { requestedChannels = availableChannels
                     }
                 continue updatedState
-            -- Update the Message Logs.
-            -- TODO: Insert only new channel's logs so we can send Subscribe
-            -- events for new channels without replacing existing logs.
+            -- Add the new channels' data & switch if no channel selected
             Subscriptions SubscriptionsData { subscribedChannels } ->
                 let
                     newChannel =
                         fst <$> listToMaybe (M.toList subscribedChannels)
+                    (currentChannel, channelInput) =
+                        case appCurrentChannel s of
+                            Nothing ->
+                                (newChannel, inputForm newChannel)
+                            Just _ ->
+                                (appCurrentChannel s, appInputForm s)
                     reversedLogs =
                         fmap (\c -> c { messageLog = reverse $ messageLog c })
                             subscribedChannels
                 in
                     continue s
-                        { appChannelData = reversedLogs
-                        , appCurrentChannel = newChannel
-                        , appInputForm = inputForm newChannel
+                        { appChannelData =
+                            M.union reversedLogs $ appChannelData s
+                        , appCurrentChannel = currentChannel
+                        , appInputForm = channelInput
                         }
             -- Add Message to Channel's Log
             NewMessage NewMessageData { newMessageTarget, newMessage } ->
