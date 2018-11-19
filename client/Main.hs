@@ -43,12 +43,12 @@ TODO:
   subscribe to
 * When switching between channels, should we retain the input form text, or
   keep the input form text on a per-channel basis?
-* Add usernames to message logs
 * Server/Status log like in irssi
-* Show Bar with Channel Name & Topic
-* Show Topic & Nicklist
+* Show Nicklist
 * Show Session Bar - current time, username in current channel, subscribed
   channels(differentiate between hidden & shown)
+* Colors - randomize color of other's usernames, bold mentions of our name,
+           Brick theme so users can customize colors
 
 -}
 
@@ -62,7 +62,6 @@ data AppWidget
 type AppEvent
     = ClientMsg
 
--- | TODO: Add per-channel Input Forms
 data AppState
     = AppState
         { appDaemonQueue :: DaemonQueue
@@ -137,7 +136,6 @@ connectToDaemon daemonQueue clientChan = do
 
 
 -- | Configure the Brick UI.
--- TODO: Colors!
 app :: App AppState AppEvent AppWidget
 app =
     App
@@ -151,11 +149,11 @@ app =
 colorMap :: AttrMap
 colorMap =
     attrMap V.defAttr
-        [ (topicAttr, V.black `on` V.white)
+        [ (topBarAttr, V.black `on` V.white)
         ]
 
-topicAttr :: AttrName
-topicAttr = "topic"
+topBarAttr :: AttrName
+topBarAttr = "topBar"
 
 
 -- Update
@@ -276,14 +274,14 @@ draw s =
 renderCurrentView :: AppState -> Widget AppWidget
 renderCurrentView s =
     vBox
-        [ renderTopic s
+        [ renderTopBar s
         , padBottom Max $ renderMessageLog s
         , vLimit 1 $ renderForm (appInputForm s)
         ]
 
 
-renderTopic :: AppState -> Widget AppWidget
-renderTopic s =
+renderTopBar :: AppState -> Widget AppWidget
+renderTopBar s =
     let
         topicText =
             case appCurrentChannel s >>= flip M.lookup (appChannelData s) of
@@ -291,12 +289,19 @@ renderTopic s =
                     getChannelTopic channelTopic
                 Nothing ->
                     ""
+        channelName =
+            case appCurrentChannel s of
+                Just (ChannelId _ (ChannelName name)) ->
+                    "[" <> name <> "]"
+                Nothing ->
+                    ""
     in
-        withAttr topicAttr
+        withAttr topBarAttr
             $ vLimit 1
-            $ padLeft (Pad 1)
-            $ padRight Max
-            $ txt topicText
+            $ hBox
+                [ txt channelName
+                , padLeft (Pad 1) $ padRight Max $ txt topicText
+                ]
 
 
 -- | Render the Message Log for a Channel.
