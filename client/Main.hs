@@ -8,7 +8,6 @@ import Brick
 import Brick.BChan (BChan, newBChan, writeBChan)
 import Brick.Forms ((@@=), Form, newForm, editTextField, renderForm, handleFormEvent, formState, allFieldsValid)
 import Brick.Widgets.Border (vBorder)
-import Control.Arrow (second)
 import Control.Concurrent.Async (Concurrently(..))
 import Control.Concurrent.STM (atomically, newTQueueIO, writeTQueue)
 import Control.Lens (makeLenses)
@@ -67,15 +66,11 @@ type AppEvent
 data AppState
     = AppState
         { appDaemonQueue :: DaemonQueue
-        , appChannelData :: ChannelData
+        , appChannelData :: M.Map ChannelId ChannelData
         , appClientId :: Maybe ClientId
         , appCurrentChannel :: Maybe ChannelId
         , appInputForm :: Form InputForm AppEvent AppWidget
         }
-
--- TODO use better datatype for appending to end of message list.
-type ChannelData
-    = M.Map ChannelId [ChatMessage]
 
 newtype InputForm
     = InputForm
@@ -200,18 +195,29 @@ handleEvent s = \case
             -- Update the Message Logs.
             -- TODO: Insert only new channel's logs so we can send Subscribe
             -- events for new channels without replacing existing logs.
-            Subscriptions SubscriptionsData { subscriptionLogs } ->
-                let newChannel = fst <$> listToMaybe subscriptionLogs in
-                continue s
-                    { appChannelData = M.fromList $ map (second reverse) subscriptionLogs
-                    , appCurrentChannel = newChannel
-                    , appInputForm = inputForm newChannel
-                    }
+            Subscriptions SubscriptionsData { subscribedChannels } ->
+                let
+                    newChannel =
+                        fst <$> listToMaybe (M.toList subscribedChannels)
+                    reversedLogs =
+                        fmap (\c -> c { messageLog = reverse $ messageLog c })
+                            subscribedChannels
+                in
+                    continue s
+                        { appChannelData = reversedLogs
+                        , appCurrentChannel = newChannel
+                        , appInputForm = inputForm newChannel
+                        }
             -- Add Message to Channel's Log
             NewMessage NewMessageData { newMessageTarget, newMessage } ->
                 continue s
                     { appChannelData =
-                        M.adjust (++ [newMessage]) newMessageTarget $ appChannelData s
+                        M.adjust
+                            (\d ->
+                                d { messageLog = messageLog d ++ [newMessage] }
+                            )
+                            newMessageTarget
+                        $ appChannelData s
                     }
     _ ->
         -- Ignore the Mouse Up/Down Events
@@ -250,8 +256,8 @@ renderCurrentView s =
 renderMessageLog :: AppState -> Widget AppWidget
 renderMessageLog s =
     case appCurrentChannel s >>= flip M.lookup (appChannelData s) of
-        Just messages ->
-            vBox . nonEmptyLog $ map renderMessage messages
+        Just ChannelData { messageLog } ->
+            vBox . nonEmptyLog $ map renderMessage messageLog
         Nothing ->
             hBox
                 [ txt "Connecting to Daemon..."

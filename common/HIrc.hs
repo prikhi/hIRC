@@ -12,6 +12,7 @@ import GHC.Generics (Generic)
 import System.Directory (createDirectoryIfMissing)
 import System.Environment.XDG.BaseDir (getUserDataDir, getUserDataFile)
 
+import qualified Data.Map.Strict as M
 import qualified Data.Text as T
 
 
@@ -45,8 +46,8 @@ instance Binary HelloData
 -- | TODO: Maybe just send a Map the Client can union with their Map.
 newtype SubscriptionsData
     = SubscriptionsData
-        { subscriptionLogs :: [(ChannelId, [ChatMessage])]
-        -- ^ The Chat Logs for Each Newly Subscribed Channel
+        { subscribedChannels :: M.Map ChannelId ChannelData
+        -- ^ The ChannelData for Each Newly Subscribed Channel
         } deriving (Show, Generic)
 instance Binary SubscriptionsData
 
@@ -121,6 +122,14 @@ newtype UserName
         { getUserName :: T.Text
         } deriving (Show, Generic)
 instance Binary UserName
+
+data ChannelData
+    = ChannelData
+        { userList :: [UserName]
+        , messageLog :: [ChatMessage]
+        } deriving (Show, Generic)
+instance Binary ChannelData
+
 
 -- TODO Will need some way to signify channel & server messages(e.g., topic
 -- change).

@@ -22,7 +22,7 @@ import Data.Conduit ((.|), ConduitT, Void, runConduit)
 import Data.Conduit.Network.Unix (AppDataUnix, serverSettings, runUnixServer, appSource, appSink)
 import Data.Conduit.Serialization.Binary (conduitEncode, conduitDecode)
 import Data.Conduit.TQueue (sinkTQueue, sourceTMQueue)
-import Data.Maybe (fromMaybe, listToMaybe)
+import Data.Maybe (fromMaybe, listToMaybe, catMaybes)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Time (ZonedTime, getZonedTime)
 import Data.Yaml.Config (loadYamlSettings, ignoreEnv)
@@ -245,17 +245,18 @@ handleDaemonMessage clientId = \case
     -- a Subscriptions message.
     Subscribe SubscribeData { requestedChannels } -> do
         mapM_ (subscribe clientId) requestedChannels
-        subscriptions <- mapM (\c -> (c,) <$> getMessages c) requestedChannels
+        subscriptions <- M.fromList . catMaybes <$>
+            mapM (\c -> fmap (c,) <$> getChannelData c) requestedChannels
         sendClientMessage clientId $ Subscriptions $ SubscriptionsData subscriptions
         where
-            getMessages
-                :: (GetServerData m) => ChannelId -> m [ChatMessage]
-            getMessages (ChannelId serverName channelName) =
+            getChannelData
+                :: (GetServerData m) => ChannelId -> m (Maybe ChannelData)
+            getChannelData (ChannelId serverName channelName) =
                 getServerData serverName >>= \case
                     Nothing ->
-                        return []
+                        return Nothing
                     Just sData ->
-                        return $ maybe [] messageLog $ M.lookup channelName (channelMap sData)
+                        return $ M.lookup channelName (channelMap sData)
     -- Send the message to the IRC server & subscribed clients.
     SendMessage SendMessageData { messageTarget, messageContents } -> do
         let (ChannelId serverName channelName) = messageTarget
@@ -616,12 +617,6 @@ data ServerData
         { channelMap :: M.Map ChannelName ChannelData
         , serverLog :: [ChatMessage]
         , serverThread :: Maybe (Async (), IRCState ())
-        }
-
-data ChannelData
-    = ChannelData
-        { userList :: [UserName]
-        , messageLog :: [ChatMessage]
         }
 
 data ServerSecurity
