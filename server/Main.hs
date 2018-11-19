@@ -14,7 +14,7 @@ import Control.Concurrent.STM
 import Control.Concurrent.STM.TMQueue (newTMQueue, writeTMQueue, closeTMQueue)
 import Control.Exception.Safe (bracket)
 import Control.Lens ((&), (.~), (%~), (^.))
-import Control.Monad (void, forever, forM_)
+import Control.Monad (void, forever)
 import Control.Monad.Reader (MonadIO, MonadReader, ReaderT, runReaderT, asks, liftIO)
 import Control.Monad.Trans.Control (MonadBaseControl, StM)
 import Data.Aeson ((.:), (.:?), FromJSON(..),withObject, withText, withScientific)
@@ -240,8 +240,8 @@ handleDaemonMessage
     :: ( GetServerData m
        , SendIrcMessage m
        , SendClientMessage m
+       , SendSubscribersMessage m
        , CloseClientQueue m
-       , GetSubscribers m
        , AddSubscription m
        , UpdateChannelLog m
        , GetTime m
@@ -272,17 +272,22 @@ handleDaemonMessage clientId = \case
         let (ChannelId serverName channelName) = messageTarget
         sendIrcMessage serverName
             (Privmsg (getChannelName channelName) $ Right messageContents)
-        time <- getTime
-        myNick <- getCurrentUserName serverName
-        let message = ChatMessage messageContents myNick time
+        message <- makeMessage serverName messageContents
         updateChannelLog messageTarget message
-        clients <- getSubscribers messageTarget
-        forM_ clients $ \subscriberId ->
-            sendClientMessage subscriberId $
-                NewMessage NewMessageData
-                    { newMessageTarget = messageTarget
-                    , newMessage = message
-                    }
+        sendSubscribersMessage messageTarget $ NewMessage NewMessageData
+            { newMessageTarget = messageTarget
+            , newMessage = message
+            }
+        where
+            makeMessage
+                :: (GetTime m, GetUserName m)
+                => ServerName
+                -> T.Text
+                -> m ChannelMessage
+            makeMessage serverName message =
+                ChatMessage message
+                    <$> getCurrentUserName serverName
+                    <*> getTime
     -- Close the Client's Queue.
     Goodbye ->
         closeClientQueue clientId
@@ -290,8 +295,7 @@ handleDaemonMessage clientId = \case
 handleIrcMessage
     :: ( UpdateChannelLog m
        , UpdateChannelTopic m
-       , SendClientMessage m
-       , GetSubscribers m
+       , SendSubscribersMessage m
        )
     => IrcMsg
     -> m ()
@@ -299,12 +303,10 @@ handleIrcMessage = \case
     -- Store the message & send it to the appropriate clients
     ReceivedMessage channelId message -> do
         updateChannelLog channelId message
-        clients <- getSubscribers channelId
-        forM_ clients $ \clientId ->
-            sendClientMessage clientId $ NewMessage NewMessageData
-                { newMessageTarget = channelId
-                , newMessage = message
-                }
+        sendSubscribersMessage channelId $ NewMessage NewMessageData
+            { newMessageTarget = channelId
+            , newMessage = message
+            }
     ChangedTopic channelId userName ct@(ChannelTopic topic) time -> do
         let message = TopicMessage
                 { messageText = topic
@@ -313,17 +315,13 @@ handleIrcMessage = \case
                 }
         updateChannelLog channelId message
         updateChannelTopic channelId ct
-        clients <- getSubscribers channelId
-        forM_ clients $ \clientId ->
-            sendClientMessage clientId $ NewTopic NewMessageData
-                { newMessageTarget = channelId
-                , newMessage = message
-                }
+        sendSubscribersMessage channelId $ NewTopic NewMessageData
+            { newMessageTarget = channelId
+            , newMessage = message
+            }
     GotTopic channelId channelTopic _ -> do
         updateChannelTopic channelId channelTopic
-        clients <- getSubscribers channelId
-        forM_ clients $ \clientId ->
-            sendClientMessage clientId $ InitialTopic channelId channelTopic
+        sendSubscribersMessage channelId $ InitialTopic channelId channelTopic
 
 
 
@@ -433,6 +431,16 @@ instance (HasClientQueues env, MonadIO m) => SendClientMessage (ReaderT env m) w
                 return ()
             Just queue ->
                 liftIO . atomically $ writeTMQueue queue msg
+
+
+-- | Send Messages to a Channel's Subscribed Clients
+class Monad m => SendSubscribersMessage m where
+    sendSubscribersMessage :: ChannelId -> ClientMsg -> m ()
+
+instance (HasClientQueues env, HasSubscriptions env, MonadIO m)
+        => SendSubscribersMessage (ReaderT env m) where
+    sendSubscribersMessage channelId msg =
+        getSubscribers channelId >>= mapM_ (`sendClientMessage` msg)
 
 
 -- | Send Messages to IRC Servers
