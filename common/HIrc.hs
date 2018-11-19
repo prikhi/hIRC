@@ -32,6 +32,9 @@ data ClientMsg
     | NewMessage NewMessageData
     -- ^ A new message has arrived in the channel.
     | NewTopic NewMessageData
+    -- ^ The channel's topic has been changed.
+    | InitialTopic ChannelId ChannelTopic
+    -- ^ The server has sent us a channel's initial topic.
     deriving (Show, Generic)
 instance Binary ClientMsg
 

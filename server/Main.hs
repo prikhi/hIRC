@@ -144,6 +144,10 @@ connectToServer defaultName serverName config = do
                                 (ChannelId serverName (ChannelName name))
                                 (UserName senderNick)
                                 (ChannelTopic newTopic)
+                        (Numeric 332 [_, name, topic], _) ->
+                            Just $ GotTopic
+                                (ChannelId serverName (ChannelName name))
+                                (ChannelTopic topic)
                         _ ->
                             Nothing
                 handler :: Source T.Text -> (ZonedTime -> IrcMsg) -> IRC s ()
@@ -293,26 +297,33 @@ handleIrcMessage
     -> m ()
 handleIrcMessage = \case
     -- Store the message & send it to the appropriate clients
-    ReceivedMessage target message -> do
-        updateChannelLog target message
-        clients <- getSubscribers target
+    ReceivedMessage channelId message -> do
+        updateChannelLog channelId message
+        clients <- getSubscribers channelId
         forM_ clients $ \clientId ->
             sendClientMessage clientId $ NewMessage NewMessageData
-                { newMessageTarget = target
+                { newMessageTarget = channelId
                 , newMessage = message
                 }
     ChangedTopic channelId userName ct@(ChannelTopic topic) time -> do
-        updateChannelTopic channelId userName ct time
+        let message = TopicMessage
+                { messageText = topic
+                , messageUser = userName
+                , messageTime = time
+                }
+        updateChannelLog channelId message
+        updateChannelTopic channelId ct
         clients <- getSubscribers channelId
         forM_ clients $ \clientId ->
             sendClientMessage clientId $ NewTopic NewMessageData
                 { newMessageTarget = channelId
-                , newMessage = TopicMessage
-                    { messageText = topic
-                    , messageUser = userName
-                    , messageTime = time
-                    }
+                , newMessage = message
                 }
+    GotTopic channelId channelTopic _ -> do
+        updateChannelTopic channelId channelTopic
+        clients <- getSubscribers channelId
+        forM_ clients $ \clientId ->
+            sendClientMessage clientId $ InitialTopic channelId channelTopic
 
 
 
@@ -396,19 +407,14 @@ instance (HasServerMap env, MonadIO m) => UpdateChannelLog (ReaderT env m) where
                     )
                     channelName
 
--- | Set the Topic for a Channel & Notify any Subscribers
+-- | Set the Topic for a Channel
 class Monad m => UpdateChannelTopic m where
-    updateChannelTopic :: ChannelId -> UserName -> ChannelTopic -> ZonedTime -> m ()
+    updateChannelTopic :: ChannelId -> ChannelTopic -> m ()
 
 instance (HasServerMap env, MonadIO m) => UpdateChannelTopic (ReaderT env m) where
-    updateChannelTopic cId@(ChannelId serverName channelName) userName topic time = do
+    updateChannelTopic (ChannelId serverName channelName) topic =
         updateServerData serverName
             $ fmap (\d -> d { channelMap = updateChannelMap $ channelMap d })
-        updateChannelLog cId $ TopicMessage
-            { messageText = getChannelTopic topic
-            , messageUser = userName
-            , messageTime = time
-            }
         where
             updateChannelMap =
                 M.update (\cData -> Just $ cData { channelTopic = topic })
@@ -637,6 +643,7 @@ type IrcQueue
 data IrcMsg
     = ReceivedMessage ChannelId ChannelMessage
     | ChangedTopic ChannelId UserName ChannelTopic ZonedTime
+    | GotTopic ChannelId ChannelTopic ZonedTime
     deriving (Show)
 
 data Config

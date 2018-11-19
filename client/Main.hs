@@ -241,6 +241,14 @@ handleEvent s = \case
                             newMessageTarget
                         $ appChannelData s
                     }
+            -- Update Channel Topic
+            InitialTopic channelId channelTopic ->
+                continue s
+                    { appChannelData =
+                        M.adjust (\d -> d { channelTopic = channelTopic })
+                            channelId
+                            (appChannelData s)
+                    }
     _ ->
         -- Ignore the Mouse Up/Down Events
         continue s
