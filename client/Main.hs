@@ -10,13 +10,14 @@ import Brick.Forms ((@@=), Form, newForm, editTextField, renderForm, handleFormE
 import Brick.Widgets.Border (vBorder)
 import Control.Concurrent.Async (Concurrently(..))
 import Control.Concurrent.STM (atomically, newTQueueIO, writeTQueue)
-import Control.Lens (makeLenses)
+import Control.Lens ((^.), (.~), (?~), (%~), makeLenses)
 import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Conduit ((.|), ConduitT, runConduit, await)
 import Data.Conduit.Serialization.Binary (conduitEncode, conduitDecode)
 import Data.Conduit.Network.Unix (AppDataUnix, clientSettings, runUnixClient, appSource, appSink)
 import Data.Conduit.TQueue (sourceTQueue)
+import Data.Function ((&))
 import Data.Maybe (listToMaybe)
 import Data.Monoid ((<>))
 import Data.Time (formatTime, defaultTimeLocale)
@@ -62,14 +63,6 @@ data AppWidget
 type AppEvent
     = ClientMsg
 
-data AppState
-    = AppState
-        { appDaemonQueue :: DaemonQueue
-        , appChannelData :: M.Map ChannelId ChannelData
-        , appClientId :: Maybe ClientId
-        , appCurrentChannel :: Maybe ChannelId
-        , appInputForm :: Form InputForm AppEvent AppWidget
-        }
 
 newtype InputForm
     = InputForm
@@ -77,6 +70,17 @@ newtype InputForm
         } deriving (Show)
 
 makeLenses ''InputForm
+
+data AppState
+    = AppState
+        { _appDaemonQueue :: DaemonQueue
+        , _appChannelData :: M.Map ChannelId ChannelData
+        , _appClientId :: Maybe ClientId
+        , _appCurrentChannel :: Maybe ChannelId
+        , _appInputForm :: Form InputForm AppEvent AppWidget
+        }
+
+makeLenses ''AppState
 
 -- | Create a blank input form, labeled by the current channel's name.
 inputForm :: Maybe ChannelId -> Form InputForm AppEvent AppWidget
@@ -105,11 +109,11 @@ main = do
             V.mkVty V.defaultConfig
         state daemonQueue =
             AppState
-                { appDaemonQueue = daemonQueue
-                , appChannelData = M.empty
-                , appClientId = Nothing
-                , appCurrentChannel = Nothing
-                , appInputForm = inputForm Nothing
+                { _appDaemonQueue = daemonQueue
+                , _appChannelData = M.empty
+                , _appClientId = Nothing
+                , _appCurrentChannel = Nothing
+                , _appInputForm = inputForm Nothing
                 }
 
 
@@ -168,33 +172,35 @@ handleEvent s = \case
                 sendDaemonMessage s Goodbye >> halt s
             -- Send Chat Message to Channel if one is available.
             V.EvKey V.KEnter [] ->
-                if allFieldsValid (appInputForm s) then
-                    case appCurrentChannel s of
+                if allFieldsValid (s ^. appInputForm) then
+                    case s ^. appCurrentChannel of
                         Nothing ->
                             continue s
                         Just channelId -> do
-                            let message = _input . formState $ appInputForm s
+                            let message = _input . formState $ s ^. appInputForm
                             sendDaemonMessage s $
                                 SendMessage SendMessageData
                                     { messageTarget = channelId
                                     , messageContents = message
                                     }
-                            continue s { appInputForm = inputForm (Just channelId) }
+                            continue $
+                                s & appInputForm .~ inputForm (Just channelId)
                 else
                     continue s
 
             -- Update the Input form.
             _ -> do
-                updatedForm <- handleFormEvent e $ appInputForm s
-                continue s { appInputForm = updatedForm }
+                updatedForm <- handleFormEvent e $ s ^. appInputForm
+                continue $ s & appInputForm .~ updatedForm
     AppEvent msg ->
+        -- TODO: refactor into own function
         case msg of
             -- Just subscribe to all channels for now.
             -- TODO: Some way to select channels - either start blank w/
             -- ability to add channels to a view, or group channels & start
             -- based on flag.
             Hello HelloData { yourClientId, availableChannels } -> do
-                let updatedState = s { appClientId = Just yourClientId }
+                let updatedState = s & appClientId ?~ yourClientId
                 sendDaemonMessage updatedState $ Subscribe SubscribeData
                     { requestedChannels = availableChannels
                     }
@@ -205,53 +211,43 @@ handleEvent s = \case
                     newChannel =
                         fst <$> listToMaybe (M.toList subscribedChannels)
                     (currentChannel, channelInput) =
-                        case appCurrentChannel s of
+                        case s ^. appCurrentChannel of
                             Nothing ->
                                 (newChannel, inputForm newChannel)
                             Just _ ->
-                                (appCurrentChannel s, appInputForm s)
+                                (s ^. appCurrentChannel, s ^. appInputForm)
                     reversedLogs =
                         fmap (\c -> c { messageLog = reverse $ messageLog c })
                             subscribedChannels
                 in
-                    continue s
-                        { appChannelData =
-                            M.union reversedLogs $ appChannelData s
-                        , appCurrentChannel = currentChannel
-                        , appInputForm = channelInput
-                        }
+                    continue $ s
+                        & appChannelData %~ M.union reversedLogs
+                        & appCurrentChannel .~ currentChannel
+                        & appInputForm .~ channelInput
             -- Add Message to Channel's Log
             NewMessage NewMessageData { newMessageTarget, newMessage } ->
-                continue s
-                    { appChannelData =
+                continue $ s
+                    & appChannelData %~
                         M.adjust
                             (\d ->
                                 d { messageLog = messageLog d ++ [newMessage] }
                             )
                             newMessageTarget
-                        $ appChannelData s
-                    }
             -- Update Channel Topic & Add to Log
             NewTopic NewMessageData { newMessageTarget, newMessage } ->
-                continue s
-                    { appChannelData =
-                        M.adjust
-                            (\d -> d
-                                { messageLog = messageLog d ++ [newMessage]
-                                , channelTopic = ChannelTopic $ messageText newMessage
-                                }
-                            )
-                            newMessageTarget
-                        $ appChannelData s
-                    }
+                continue $ s
+                    & appChannelData %~ M.adjust
+                        (\d -> d
+                            { messageLog = messageLog d ++ [newMessage]
+                            , channelTopic = ChannelTopic (messageText newMessage)
+                            }
+                        ) newMessageTarget
             -- Update Channel Topic
             InitialTopic channelId channelTopic ->
-                continue s
-                    { appChannelData =
-                        M.adjust (\d -> d { channelTopic = channelTopic })
-                            channelId
-                            (appChannelData s)
-                    }
+                continue $ s
+                    & appChannelData %~ M.adjust
+                        (\d -> d { channelTopic = channelTopic }) channelId
+
     _ ->
         -- Ignore the Mouse Up/Down Events
         continue s
@@ -259,8 +255,10 @@ handleEvent s = \case
 -- | Send a message to the daemon if a ClientId is available.
 sendDaemonMessage :: MonadIO m => AppState -> DaemonMsg -> m ()
 sendDaemonMessage s m =
-    maybeM (appClientId s) $ \clientId ->
-        liftIO $ atomically $ writeTQueue (appDaemonQueue s) $ DaemonRequest clientId m
+    maybeM (s ^. appClientId) $ \clientId ->
+        liftIO $ atomically
+            $ writeTQueue (s ^. appDaemonQueue)
+            $ DaemonRequest clientId m
 
 maybeM :: Monad m => Maybe a -> (a -> m ()) -> m ()
 maybeM m f =
@@ -281,7 +279,7 @@ renderCurrentView s =
     vBox
         [ renderTopBar s
         , padBottom Max $ renderMessageLog s
-        , vLimit 1 $ renderForm (appInputForm s)
+        , vLimit 1 $ renderForm $ s ^. appInputForm
         ]
 
 
@@ -289,13 +287,13 @@ renderTopBar :: AppState -> Widget AppWidget
 renderTopBar s =
     let
         topicText =
-            case appCurrentChannel s >>= flip M.lookup (appChannelData s) of
+            case currentChannelData s of
                 Just ChannelData { channelTopic } ->
                     getChannelTopic channelTopic
                 Nothing ->
                     ""
         channelName =
-            case appCurrentChannel s of
+            case s ^. appCurrentChannel of
                 Just (ChannelId _ (ChannelName name)) ->
                     "[" <> name <> "]"
                 Nothing ->
@@ -313,7 +311,7 @@ renderTopBar s =
 -- TODO: Use list widget for scrolling capability
 renderMessageLog :: AppState -> Widget AppWidget
 renderMessageLog s =
-    case appCurrentChannel s >>= flip M.lookup (appChannelData s) of
+    case currentChannelData s of
         Just ChannelData { messageLog } ->
             vBox . nonEmptyLog $ map renderMessage messageLog
         Nothing ->
@@ -363,3 +361,8 @@ renderMessageLog s =
                 [ txt " " ]
             else
                 l
+
+
+currentChannelData :: AppState -> Maybe ChannelData
+currentChannelData s =
+    s ^. appCurrentChannel >>= flip M.lookup (s ^. appChannelData)
